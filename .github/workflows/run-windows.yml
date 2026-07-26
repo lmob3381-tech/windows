@@ -1,0 +1,45 @@
+name: Run Windows Desktop (noVNC + cloudflared)
+
+on:
+  workflow_dispatch:
+    inputs:
+      win_version:
+        description: "Versi Windows (10 / 11 / 2019 / 2022 / dst)"
+        required: false
+        default: "11"
+      ram_size:
+        description: "RAM untuk Windows"
+        required: false
+        default: "8G"
+      cpu_cores:
+        description: "Jumlah CPU core"
+        required: false
+        default: "4"
+      disk_size:
+        description: "Ukuran disk"
+        required: false
+        default: "40G"
+      run_minutes:
+        description: "Berapa menit sesi dibiarkan hidup (maks ~350, batas GH Actions 360 menit)"
+        required: false
+        default: "350"
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Jalankan Windows + noVNC + Cloudflare Tunnel
+        env:
+          WIN_VERSION: ${{ github.event.inputs.win_version }}
+          RAM_SIZE: ${{ github.event.inputs.ram_size }}
+          CPU_CORES: ${{ github.event.inputs.cpu_cores }}
+          DISK_SIZE: ${{ github.event.inputs.disk_size }}
+          RUN_MINUTES: ${{ github.event.inputs.run_minutes }}
+        run: |
+          chmod +x ./scripts/run-windows.sh
+          ./scripts/run-windows.sh

@@ -1,0 +1,79 @@
+name: Run Ollama 7B with Cloudflare Tunnel
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model Ollama yang mau dijalankan"
+        required: false
+        default: "llama2:7b"
+        type: string
+      duration_minutes:
+        description: "Berapa lama server nyala (menit)"
+        required: false
+        default: "180"
+        type: string
+
+jobs:
+  run-ollama:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      OLLAMA_MODEL: ${{ inputs.model || \llama2:7b\ }}
+      DURATION_MINUTES: ${{ inputs.duration_minutes || \180\ }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama server (background)
+        run: |
+          nohup ollama serve > ollama.log 2>&1 &
+          echo "Menunggu Ollama server siap..."
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:11434 > /dev/null; then
+              echo "Ollama server siap!"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Pull model ${{ env.OLLAMA_MODEL }}
+        run: |
+          ollama pull "${OLLAMA_MODEL}"
+
+      - name: Install cloudflared
+        run: |
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+
+      - name: Start Cloudflare Quick Tunnel
+        run: |
+          nohup cloudflared tunnel --url http://localhost:11434 > cloudflared.log 2>&1 &
+          echo "Menunggu tunnel siap..."
+          sleep 10
+          echo "=== URL TUNNEL PUBLIK ANDA ==="
+          grep -o "https://[a-zA-Z0-9.-]*\.trycloudflare\.com" cloudflared.log | head -1 || echo "URL belum muncul, cek cloudflared.log"
+          echo "==============================="
+          cat cloudflared.log
+
+      - name: Jaga server tetap nyala selama durasi yang ditentukan
+        run: |
+          sleep $((DURATION_MINUTES * 60))
+          echo "Waktu habis, server akan dimatikan."
+
+      - name: Upload log (untuk debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: |
+            ollama.log
+            cloudflared.log

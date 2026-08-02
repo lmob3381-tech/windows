@@ -195,7 +195,7 @@ jobs:
           echo "tunnel_url=$URL" >> "$GITHUB_OUTPUT"
 
       - name: Report tunnel URL to OpenClaw (with retry)
-        if: steps.rules.outputs.webhook_url != ""
+        if: "steps.rules.outputs.webhook_url != "
         env:
           WEBHOOK: ${{ steps.rules.outputs.webhook_url }}
           TUNNEL_URL: ${{ steps.tunnel.outputs.tunnel_url }}
@@ -252,7 +252,7 @@ jobs:
           echo "Durasi maksimum tercapai. Menghentikan sesi."
 
       - name: Notify OpenClaw session ended
-        if: always() && steps.rules.outputs.webhook_url != ""
+        if: "always() && steps.rules.outputs.webhook_url != "
         env:
           WEBHOOK: ${{ steps.rules.outputs.webhook_url }}
         run: |
@@ -263,4 +263,4 @@ jobs:
 
       - name: Final status
         if: always()
-        run: echo "Ollama experiment run selesai (run_id ${{ github.run_id }})."
+        run: echo "Ollama experiment run selesai (run_id ${{ github.run_id }})"

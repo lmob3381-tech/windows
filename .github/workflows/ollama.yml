@@ -22,8 +22,8 @@ jobs:
     timeout-minutes: 360
 
     env:
-      OLLAMA_MODEL: ${{ inputs.model || \llama2:7b\ }}
-      DURATION_MINUTES: ${{ inputs.duration_minutes || \180\ }}
+      OLLAMA_MODEL: ${{ inputs.model || 'llama2:7b' }}
+      DURATION_MINUTES: ${{ inputs.duration_minutes || '180' }}
 
     steps:
       - name: Checkout repo

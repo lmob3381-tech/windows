@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ollama Runner — Control Panel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  :root{
+    --bg: #0b0d0c;
+    --bg-panel: #111412;
+    --bg-input: #14211c;
+    --line: #23302a;
+    --text: #d9e6df;
+    --text-dim: #7d938a;
+    --green: #4fd88a;
+    --amber: #e0a94f;
+    --red: #e0654f;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 15% 0%, rgba(79,216,138,0.05), transparent 40%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    padding:32px 20px 80px;
+  }
+
+  .wrap{max-width:760px;margin:0 auto;}
+
+  /* header */
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    border-bottom:1px solid var(--line);
+    padding-bottom:20px;
+    margin-bottom:28px;
+  }
+  .brand-eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.15em;
+    color:var(--text-dim);
+    text-transform:uppercase;
+    margin:0 0 6px;
+  }
+  h1{
+    font-family:var(--mono);
+    font-size:22px;
+    font-weight:700;
+    margin:0;
+    letter-spacing:-0.02em;
+  }
+  .status-pill{
+    font-family:var(--mono);
+    font-size:11px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    color:var(--text-dim);
+    border:1px solid var(--line);
+    padding:6px 10px;
+    border-radius:99px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--text-dim);}
+  .dot.on{background:var(--green);box-shadow:0 0 8px var(--green);}
+  .dot.off{background:var(--red);}
+
+  /* panels */
+  .panel{
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:22px 22px 24px;
+    margin-bottom:18px;
+  }
+  .panel-title{
+    font-family:var(--mono);
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.1em;
+    color:var(--green);
+    margin:0 0 4px;
+  }
+  .panel-sub{
+    font-size:13px;
+    color:var(--text-dim);
+    margin:0 0 18px;
+  }
+
+  label{
+    display:block;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-dim);
+    margin-bottom:6px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+  }
+  input[type=text], input[type=number], input[type=password], textarea, select{
+    width:100%;
+    background:var(--bg-input);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:13px;
+    padding:10px 12px;
+    border-radius:6px;
+    margin-bottom:16px;
+    outline:none;
+    transition:border-color .15s;
+  }
+  input:focus, textarea:focus, select:focus{border-color:var(--green);}
+  textarea{resize:vertical;min-height:64px;}
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+  @media (max-width:560px){.row2,.row3{grid-template-columns:1fr;}}
+
+  .hint{font-size:12px;color:var(--text-dim);margin-top:-10px;margin-bottom:16px;}
+
+  button{
+    font-family:var(--mono);
+    font-size:13px;
+    font-weight:600;
+    border:none;
+    border-radius:6px;
+    padding:11px 18px;
+    cursor:pointer;
+    transition:transform .1s, opacity .15s;
+  }
+  button:active{transform:scale(0.98);}
+  button:disabled{opacity:0.5;cursor:not-allowed;}
+  .btn-primary{background:var(--green);color:#0b0d0c;}
+  .btn-primary:hover:not(:disabled){opacity:0.9;}
+  .btn-secondary{background:transparent;border:1px solid var(--line);color:var(--text);}
+  .btn-secondary:hover:not(:disabled){border-color:var(--text-dim);}
+  .btn-danger{background:transparent;border:1px solid var(--red);color:var(--red);}
+
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;}
+
+  /* slider for hours */
+  .hours-display{
+    font-family:var(--mono);
+    font-size:28px;
+    font-weight:700;
+    color:var(--amber);
+    margin-bottom:2px;
+  }
+  input[type=range]{
+    width:100%;
+    accent-color:var(--amber);
+    margin:10px 0 4px;
+  }
+  .hours-caption{font-size:12px;color:var(--text-dim);margin-bottom:16px;}
+
+  /* toggle */
+  .toggle-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 0;
+    border-top:1px solid var(--line);
+  }
+  .toggle-row:first-of-type{border-top:none;}
+  .switch{position:relative;width:40px;height:22px;flex-shrink:0;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider-toggle{
+    position:absolute;cursor:pointer;inset:0;
+    background:var(--line);border-radius:99px;transition:.15s;
+  }
+  .slider-toggle:before{
+    content:"";position:absolute;height:16px;width:16px;left:3px;top:3px;
+    background:var(--text-dim);border-radius:50%;transition:.15s;
+  }
+  input:checked + .slider-toggle{background:rgba(79,216,138,0.25);}
+  input:checked + .slider-toggle:before{background:var(--green);transform:translateX(18px);}
+
+  /* log console */
+  .console{
+    font-family:var(--mono);
+    font-size:12px;
+    background:#080a09;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:14px;
+    height:150px;
+    overflow-y:auto;
+    color:var(--text-dim);
+    white-space:pre-wrap;
+    word-break:break-all;
+  }
+  .console .ok{color:var(--green);}
+  .console .err{color:var(--red);}
+  .console .info{color:var(--text);}
+
+  footer{
+    text-align:center;
+    font-size:11px;
+    color:var(--text-dim);
+    font-family:var(--mono);
+    margin-top:30px;
+  }
+
+  a{color:var(--green);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="brand-eyebrow">Eksperimen mandiri // GitHub Actions</p>
+      <h1>Ollama Runner Control</h1>
+    </div>
+    <div class="status-pill"><span class="dot" id="conn-dot"></span><span id="conn-text">belum terhubung</span></div>
+  </header>
+
+  <!-- KONEKSI -->
+  <div class="panel">
+    <p class="panel-title">01 · Koneksi GitHub</p>
+    <p class="panel-sub">Token dan repo hanya disimpan di memori tab ini — hilang saat halaman ditutup.</p>
+
+    <label for="pat">Personal Access Token (repo scope)</label>
+    <input type="password" id="pat" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+
+    <div class="row2">
+      <div>
+        <label for="owner">Pemilik repo</label>
+        <input type="text" id="owner" placeholder="username-github">
+      </div>
+      <div>
+        <label for="repo">Nama repo</label>
+        <input type="text" id="repo" placeholder="ollama-experiment">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" onclick="testConnection()">Sambungkan</button>
+    </div>
+  </div>
+
+  <!-- ATURAN LLM -->
+  <div class="panel">
+    <p class="panel-title">02 · Aturan LLM</p>
+    <p class="panel-sub">Disimpan ke <code>config/llm-rules.json</code> di repo. Dibaca ulang setiap sesi run dimulai.</p>
+
+    <label for="model">Model</label>
+    <input type="text" id="model" value="qwen2.5:7b">
+
+    <label for="system_prompt">System prompt</label>
+    <textarea id="system_prompt">You are a helpful assistant.</textarea>
+
+    <div class="row3">
+      <div>
+        <label for="temperature">Temperature</label>
+        <input type="number" id="temperature" value="0.7" step="0.1" min="0" max="2">
+      </div>
+      <div>
+        <label for="top_p">Top P</label>
+        <input type="number" id="top_p" value="0.9" step="0.05" min="0" max="1">
+      </div>
+      <div>
+        <label for="num_ctx">Context (token)</label>
+        <input type="number" id="num_ctx" value="4096" step="512" min="512">
+      </div>
+    </div>
+
+    <label for="webhook_url">Webhook OpenClaw</label>
+    <input type="text" id="webhook_url" placeholder="https://openclaw.example.com/webhook/ollama">
+    <label for="webhook_secret">Secret webhook (opsional)</label>
+    <input type="password" id="webhook_secret" placeholder="kosongkan jika tidak pakai auth">
+
+    <div class="btn-row">
+      <button class="btn-primary" onclick="saveRules()">Simpan aturan</button>
+    </div>
+  </div>
+
+  <!-- DURASI -->
+  <div class="panel">
+    <p class="panel-title">03 · Durasi run</p>
+    <p class="panel-sub">Batas keras GitHub Actions adalah 6 jam per sesi — geser tidak bisa melewati itu.</p>
+
+    <div class="hours-display" id="hours-display">6 jam</div>
+    <input type="range" id="hours-slider" min="1" max="6" step="1" value="6" oninput="updateHoursDisplay()">
+    <p class="hours-caption">Sesi otomatis berhenti setelah durasi ini tercapai, apa pun yang terjadi.</p>
+  </div>
+
+  <!-- JADWAL -->
+  <div class="panel">
+    <p class="panel-title">04 · Jadwal otomatis</p>
+    <p class="panel-sub">Aktifkan supaya sesi mulai sendiri lewat GitHub Actions cron (waktu dalam UTC).</p>
+
+    <div class="toggle-row">
+      <div>
+        <div style="font-family:var(--mono);font-size:13px;">Auto-run terjadwal</div>
+        <div style="font-size:12px;color:var(--text-dim);">Nonaktif = hanya bisa dijalankan manual</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="cron-enabled" onchange="toggleCronFields()">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div id="cron-fields" style="margin-top:16px;display:none;">
+      <div class="row2">
+        <div>
+          <label for="cron-hour">Jam mulai (UTC, 0–23)</label>
+          <input type="number" id="cron-hour" min="0" max="23" value="0">
+        </div>
+        <div>
+          <label for="cron-minute">Menit (0–59)</label>
+          <input type="number" id="cron-minute" min="0" max="59" value="0">
+        </div>
+      </div>
+      <label for="cron-days">Hari</label>
+      <select id="cron-days">
+        <option value="*">Setiap hari</option>
+        <option value="1-5">Senin–Jumat</option>
+        <option value="0,6">Sabtu–Minggu</option>
+        <option value="1">Senin saja</option>
+      </select>
+      <p class="hint" id="cron-preview">Ekspresi cron: 0 0 * * *</p>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" onclick="saveCron()">Simpan jadwal</button>
+    </div>
+  </div>
+
+  <!-- KONTROL MANUAL -->
+  <div class="panel">
+    <p class="panel-title">05 · Jalankan sekarang</p>
+    <p class="panel-sub">Trigger sesi manual langsung, di luar jadwal.</p>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="runNow()">Mulai sesi sekarang</button>
+      <button class="btn-secondary" onclick="checkStatus()">Cek status run terakhir</button>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel">
+    <p class="panel-title">Log aktivitas</p>
+    <div class="console" id="log"></div>
+  </div>
+
+  <footer>Semua aksi memanggil GitHub Actions REST API secara langsung dari browser ini.</footer>
+</div>
+
+<script>
+let state = { owner:'', repo:'', token:'' };
+
+function log(msg, type='info'){
+  const el = document.getElementById('log');
+  const time = new Date().toLocaleTimeString('id-ID');
+  const line = document.createElement('div');
+  line.className = type;
+  line.textContent = `[${time}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function setConn(ok, text){
+  document.getElementById('conn-dot').className = 'dot ' + (ok ? 'on' : 'off');
+  document.getElementById('conn-text').textContent = text;
+}
+
+function readConnFields(){
+  state.token = document.getElementById('pat').value.trim();
+  state.owner = document.getElementById('owner').value.trim();
+  state.repo = document.getElementById('repo').value.trim();
+  return state.token && state.owner && state.repo;
+}
+
+async function ghFetch(path, options={}){
+  const url = `https://api.github.com/repos/${state.owner}/${state.repo}${path}`;
+  const headers = Object.assign({
+    'Authorization': `Bearer ${state.token}`,
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28'
+  }, options.headers || {});
+  const res = await fetch(url, Object.assign({}, options, { headers }));
+  return res;
+}
+
+async function testConnection(){
+  if(!readConnFields()){
+    log('Isi token, owner, dan nama repo dulu.', 'err');
+    setConn(false, 'data belum lengkap');
+    return;
+  }
+  log('Menyambungkan ke ' + state.owner + '/' + state.repo + ' ...');
+  try{
+    const res = await ghFetch('');
+    if(res.ok){
+      setConn(true, `terhubung: ${state.owner}/${state.repo}`);
+      log('Berhasil terhubung ke repo.', 'ok');
+    } else {
+      setConn(false, 'gagal terhubung');
+      log(`Gagal: HTTP ${res.status}. Cek token dan nama repo.`, 'err');
+    }
+  }catch(e){
+    setConn(false, 'gagal terhubung');
+    log('Error jaringan: ' + e.message, 'err');
+  }
+}
+
+function updateHoursDisplay(){
+  const v = document.getElementById('hours-slider').value;
+  document.getElementById('hours-display').textContent = v + ' jam';
+}
+
+function toggleCronFields(){
+  const on = document.getElementById('cron-enabled').checked;
+  document.getElementById('cron-fields').style.display = on ? 'block' : 'none';
+  updateCronPreview();
+}
+
+function updateCronPreview(){
+  const h = document.getElementById('cron-hour').value || '0';
+  const m = document.getElementById('cron-minute').value || '0';
+  const d = document.getElementById('cron-days').value;
+  document.getElementById('cron-preview').textContent = `Ekspresi cron: ${m} ${h} * * ${d}`;
+}
+['cron-hour','cron-minute','cron-days'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', updateCronPreview);
+  document.getElementById(id).addEventListener('change', updateCronPreview);
+});
+
+async function triggerWorkflow(filename, inputs){
+  const res = await ghFetch(`/actions/workflows/${filename}/dispatches`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref: 'main', inputs })
+  });
+  return res;
+}
+
+async function saveRules(){
+  if(!readConnFields()){ log('Sambungkan ke repo dulu.', 'err'); return; }
+
+  const inputs = {
+    model: document.getElementById('model').value.trim() || 'qwen2.5:7b',
+    system_prompt: document.getElementById('system_prompt').value.trim() || 'You are a helpful assistant.',
+    temperature: document.getElementById('temperature').value || '0.7',
+    top_p: document.getElementById('top_p').value || '0.9',
+    num_ctx: document.getElementById('num_ctx').value || '4096',
+    max_run_hours: document.getElementById('hours-slider').value,
+    openclaw_webhook_url: document.getElementById('webhook_url').value.trim(),
+    openclaw_webhook_secret: document.getElementById('webhook_secret').value.trim()
+  };
+
+  log('Menyimpan aturan LLM ke repo...');
+  try{
+    const res = await triggerWorkflow('update-rules.yml', inputs);
+    if(res.status === 204){
+      log('Aturan LLM tersimpan. Commit sedang diproses di GitHub Actions.', 'ok');
+    } else {
+      const body = await res.text();
+      log(`Gagal simpan aturan: HTTP ${res.status} — ${body}`, 'err');
+    }
+  }catch(e){
+    log('Error jaringan: ' + e.message, 'err');
+  }
+}
+
+async function saveCron(){
+  if(!readConnFields()){ log('Sambungkan ke repo dulu.', 'err'); return; }
+
+  const enabled = document.getElementById('cron-enabled').checked;
+  const h = document.getElementById('cron-hour').value || '0';
+  const m = document.getElementById('cron-minute').value || '0';
+  const d = document.getElementById('cron-days').value;
+  const cronExpr = `${m} ${h} * * ${d}`;
+
+  log(`Menyimpan jadwal (${enabled ? 'aktif' : 'nonaktif'}): ${cronExpr}`);
+  try{
+    const res = await triggerWorkflow('update-cron.yml', {
+      cron_expression: cronExpr,
+      enabled: String(enabled)
+    });
+    if(res.status === 204){
+      log('Jadwal tersimpan. Perubahan cron sedang di-commit ke workflow.', 'ok');
+    } else {
+      const body = await res.text();
+      log(`Gagal simpan jadwal: HTTP ${res.status} — ${body}`, 'err');
+    }
+  }catch(e){
+    log('Error jaringan: ' + e.message, 'err');
+  }
+}
+
+async function runNow(){
+  if(!readConnFields()){ log('Sambungkan ke repo dulu.', 'err'); return; }
+
+  const hours = document.getElementById('hours-slider').value;
+  const model = document.getElementById('model').value.trim() || 'qwen2.5:7b';
+
+  log(`Memulai sesi manual: model ${model}, durasi ${hours} jam...`);
+  try{
+    const res = await triggerWorkflow('ollama-run.yml', {
+      max_hours: hours,
+      model: model
+    });
+    if(res.status === 204){
+      log('Sesi dipicu. Cek tab Actions di GitHub untuk log dan URL tunnel.', 'ok');
+    } else {
+      const body = await res.text();
+      log(`Gagal memulai sesi: HTTP ${res.status} — ${body}`, 'err');
+    }
+  }catch(e){
+    log('Error jaringan: ' + e.message, 'err');
+  }
+}
+
+async function checkStatus(){
+  if(!readConnFields()){ log('Sambungkan ke repo dulu.', 'err'); return; }
+
+  log('Mengambil status run terakhir...');
+  try{
+    const res = await ghFetch('/actions/workflows/ollama-run.yml/runs?per_page=1');
+    if(res.ok){
+      const data = await res.json();
+      if(data.workflow_runs && data.workflow_runs.length){
+        const r = data.workflow_runs[0];
+        log(`Run terakhir: ${r.status} / ${r.conclusion || 'berjalan'} — dimulai ${new Date(r.run_started_at).toLocaleString('id-ID')}`, 'ok');
+        log(`Lihat log: ${r.html_url}`, 'info');
+      } else {
+        log('Belum ada run tercatat.', 'info');
+      }
+    } else {
+      log(`Gagal ambil status: HTTP ${res.status}`, 'err');
+    }
+  }catch(e){
+    log('Error jaringan: ' + e.message, 'err');
+  }
+}
+
+updateHoursDisplay();
+updateCronPreview();
+log('Panel siap. Sambungkan ke repo untuk mulai.');
+</script>
+</body>
+  </html>
+      

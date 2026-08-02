@@ -54,6 +54,11 @@ jobs:
           MAXHOURS=$(jq -r '.max_run_hours // 6' "$CONFIG_FILE")
           WEBHOOK=$(jq -r '.openclaw_webhook_url // ""' "$CONFIG_FILE")
 
+          # Jangan pakai webhook kalau masih placeholder / bukan URL valid
+          case "$WEBHOOK" in
+            *REPLACE-ME*|"") WEBHOOK="" ;;
+          esac
+
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "temperature=$TEMP" >> "$GITHUB_OUTPUT"
           echo "top_p=$TOPP" >> "$GITHUB_OUTPUT"
@@ -172,8 +177,15 @@ jobs:
         id: tunnel
         run: |
           set -e
-          nohup cloudflared tunnel --url http://127.0.0.1:11434 --no-autoupdate \
-            > /tmp/cloudflared.log 2>&1 &
+
+          start_tunnel() {
+            rm -f /tmp/cloudflared.log
+            nohup cloudflared tunnel --url http://127.0.0.1:11434 --no-autoupdate \
+              > /tmp/cloudflared.log 2>&1 &
+            echo $! > /tmp/cloudflared.pid
+          }
+
+          start_tunnel
 
           echo "Menunggu URL tunnel muncul..."
           URL=""
@@ -193,9 +205,11 @@ jobs:
           fi
 
           echo "tunnel_url=$URL" >> "$GITHUB_OUTPUT"
+          echo "$URL" > /tmp/current_tunnel_url.txt
 
       - name: Report tunnel URL to OpenClaw (with retry)
-        if: "'${{ steps.rules.outputs.webhook_url }}' != ''"
+        id: report
+        if: "steps.rules.outputs.webhook_url != ''"
         env:
           WEBHOOK: ${{ steps.rules.outputs.webhook_url }}
           TUNNEL_URL: ${{ steps.tunnel.outputs.tunnel_url }}
@@ -234,33 +248,102 @@ jobs:
             echo "- **Model:** ${{ steps.rules.outputs.model }}"
             echo "- **Durasi maksimum:** ${HOURS} jam"
             echo "- **Run ID:** ${{ github.run_id }}"
+            echo ""
+            echo "> Kalau tunnel putus di tengah jalan, workflow ini otomatis start ulang tunnel dan URL bisa berubah. Cek ulang log step 'Keep alive' untuk URL terbaru."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep alive until max duration, then stop
+        id: keepalive
         env:
           RUN_SECONDS: ${{ steps.duration.outputs.seconds }}
+          WEBHOOK: ${{ steps.rules.outputs.webhook_url }}
+          MODEL: ${{ steps.rules.outputs.model }}
         run: |
           echo "Menjaga sesi tetap hidup selama ${RUN_SECONDS} detik..."
           ELAPSED=0
-          INTERVAL=60
+          INTERVAL=30
+          CURRENT_URL=$(cat /tmp/current_tunnel_url.txt)
+
+          report_new_url() {
+            NEW_URL="$1"
+            if [ -z "$WEBHOOK" ]; then
+              return 0
+            fi
+            PAYLOAD=$(jq -n \
+              --arg url "$NEW_URL" \
+              --arg model "$MODEL" \
+              --arg run_id "${{ github.run_id }}" \
+              --arg status "online" \
+              '{tunnel_url:$url, model:$model, run_id:$run_id, status:$status}')
+            curl -fsS -X POST "$WEBHOOK" -H "Content-Type: application/json" -d "$PAYLOAD" || \
+              echo "::warning::Gagal lapor URL tunnel baru ke OpenClaw."
+          }
+
           while [ "$ELAPSED" -lt "$RUN_SECONDS" ]; do
             sleep "$INTERVAL"
             ELAPSED=$((ELAPSED + INTERVAL))
-            curl -fsS http://127.0.0.1:11434/api/version > /dev/null 2>&1 || \
-              echo "::warning::Health check gagal pada detik ke-$ELAPSED, lanjut mencoba."
+
+            # 1. Cek Ollama masih hidup secara lokal
+            if ! curl -fsS --max-time 5 http://127.0.0.1:11434/api/version > /dev/null 2>&1; then
+              echo "::warning::Ollama lokal tidak merespons pada detik ke-$ELAPSED."
+              continue
+            fi
+
+            # 2. Cek tunnel masih bisa diakses dari luar (bukan cuma localhost)
+            if ! curl -fsS --max-time 8 "${CURRENT_URL}/api/version" > /dev/null 2>&1; then
+              echo "::warning::Tunnel ($CURRENT_URL) tidak bisa diakses pada detik ke-$ELAPSED. Mencoba restart tunnel..."
+
+              # Matikan cloudflared lama kalau masih ada
+              if [ -f /tmp/cloudflared.pid ]; then
+                kill "$(cat /tmp/cloudflared.pid)" 2>/dev/null || true
+              fi
+              pkill -f "cloudflared tunnel" 2>/dev/null || true
+              sleep 2
+
+              # Start tunnel baru
+              rm -f /tmp/cloudflared.log
+              nohup cloudflared tunnel --url http://127.0.0.1:11434 --no-autoupdate \
+                > /tmp/cloudflared.log 2>&1 &
+              echo $! > /tmp/cloudflared.pid
+
+              NEW_URL=""
+              for i in $(seq 1 15); do
+                NEW_URL=$(grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" /tmp/cloudflared.log | head -n1 || true)
+                if [ -n "$NEW_URL" ]; then
+                  break
+                fi
+                sleep 2
+              done
+
+              if [ -n "$NEW_URL" ] && [ "$NEW_URL" != "$CURRENT_URL" ]; then
+                echo "Tunnel baru aktif: $NEW_URL"
+                CURRENT_URL="$NEW_URL"
+                echo "$NEW_URL" > /tmp/current_tunnel_url.txt
+                {
+                  echo ""
+                  echo "**[update] Tunnel di-restart pada detik ke-$ELAPSED, URL baru:** $NEW_URL"
+                } >> "$GITHUB_STEP_SUMMARY"
+                report_new_url "$NEW_URL"
+              else
+                echo "::warning::Gagal mendapatkan tunnel URL baru setelah restart."
+              fi
+            fi
           done
+
+          echo "final_tunnel_url=$CURRENT_URL" >> "$GITHUB_OUTPUT"
           echo "Durasi maksimum tercapai. Menghentikan sesi."
 
       - name: Notify OpenClaw session ended
-        if: "always() && '${{ steps.rules.outputs.webhook_url }}' != ''"
+        if: "always() && steps.rules.outputs.webhook_url != ''"
         env:
           WEBHOOK: ${{ steps.rules.outputs.webhook_url }}
         run: |
           curl -fsS -X POST "$WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d "{\x27status\x27:\x27offline\x27,\x27run_id\x27:\x27${{ github.run_id }}\x27}" || \
+            -d "{\"status\":\"offline\",\"run_id\":\"${{ github.run_id }}\"}" || \
             echo "::warning::Gagal lapor status offline, diabaikan (job tetap dianggap sukses)."
 
       - name: Final status
         if: always()
         run: echo "Ollama experiment run selesai (run_id ${{ github.run_id }})."
+        

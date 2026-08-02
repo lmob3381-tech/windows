@@ -1,0 +1,112 @@
+name: Update LLM Rules
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Nama model Ollama"
+        required: true
+        default: "qwen2.5:7b"
+      system_prompt:
+        description: "System prompt"
+        required: false
+        default: "You are a helpful assistant."
+      temperature:
+        description: "Temperature (0-2)"
+        required: false
+        default: "0.7"
+      top_p:
+        description: "Top P (0-1)"
+        required: false
+        default: "0.9"
+      num_ctx:
+        description: "Context window size"
+        required: false
+        default: "4096"
+      max_run_hours:
+        description: "Durasi maksimum run dalam jam (hard cap 6)"
+        required: false
+        default: "6"
+      openclaw_webhook_url:
+        description: "Webhook URL OpenClaw"
+        required: false
+        default: ""
+      openclaw_webhook_secret:
+        description: "Secret/token webhook OpenClaw (opsional)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  update-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write new config
+        run: |
+          set -e
+          HOURS="${{ github.event.inputs.max_run_hours }}"
+          case "$HOURS" in
+            ''|*[!0-9.]*) HOURS=6 ;;
+          esac
+          IS_OVER=$(awk -v h="$HOURS" 'BEGIN{print (h>6)?1:0}')
+          if [ "$IS_OVER" = "1" ]; then
+            HOURS=6
+          fi
+
+          jq -n \
+            --arg model "${{ github.event.inputs.model }}" \
+            --arg system_prompt "${{ github.event.inputs.system_prompt }}" \
+            --argjson temperature "${{ github.event.inputs.temperature }}" \
+            --argjson top_p "${{ github.event.inputs.top_p }}" \
+            --argjson num_ctx "${{ github.event.inputs.num_ctx }}" \
+            --argjson max_run_hours "$HOURS" \
+            --arg webhook_url "${{ github.event.inputs.openclaw_webhook_url }}" \
+            --arg webhook_secret "${{ github.event.inputs.openclaw_webhook_secret }}" \
+            --arg updated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              model: $model,
+              system_prompt: $system_prompt,
+              temperature: $temperature,
+              top_p: $top_p,
+              num_ctx: $num_ctx,
+              max_run_hours: $max_run_hours,
+              openclaw_webhook_url: $webhook_url,
+              openclaw_webhook_secret: $webhook_secret,
+              updated_at: $updated_at,
+              updated_by: "admin-page"
+            }' > config/llm-rules.json
+
+          echo "Config baru:"
+          cat config/llm-rules.json
+
+      - name: Commit and push
+        run: |
+          set -e
+          git config user.name "ollama-admin-bot"
+          git config user.email "actions@github.com"
+          git add config/llm-rules.json
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan."
+          else
+            git commit -m "chore: update LLM rules via admin page"
+            for i in 1 2 3; do
+              if git push; then
+                echo "Push berhasil."
+                break
+              fi
+              if [ "$i" = "3" ]; then
+                echo "::error::Gagal push setelah 3 percobaan."
+                exit 1
+              fi
+              git pull --rebase
+              sleep 5
+            done
+          fi
+          

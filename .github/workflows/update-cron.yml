@@ -1,0 +1,96 @@
+name: Update Ollama Cron Schedule
+
+on:
+  workflow_dispatch:
+    inputs:
+      cron_expression:
+        description: "Cron expression baru, contoh: 0 3 * * * (jam 3 pagi UTC tiap hari)"
+        required: true
+      enabled:
+        description: "Aktifkan auto-run terjadwal?"
+        required: true
+        default: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  update-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate cron expression
+        run: |
+          set -e
+          EXPR="${{ github.event.inputs.cron_expression }}"
+          FIELDS=$(echo "$EXPR" | wc -w)
+          if [ "$FIELDS" -ne 5 ]; then
+            echo "::error::Cron expression harus 5 field (menit jam tanggal bulan hari). Diterima: '$EXPR'"
+            exit 1
+          fi
+          echo "Cron expression valid: $EXPR"
+
+      - name: Update cron in workflow file
+        run: |
+          set -e
+          FILE=".github/workflows/ollama-run.yml"
+          ENABLED="${{ github.event.inputs.enabled }}"
+
+          if [ "$ENABLED" = "true" ]; then
+            NEW_CRON="${{ github.event.inputs.cron_expression }}"
+          else
+            # cron nonaktif: tanggal 31 Februari tidak pernah ada, jadi tidak pernah trigger
+            NEW_CRON="0 0 31 2 *"
+          fi
+
+          python3 - "$FILE" "$NEW_CRON" <<'EOF'
+          import sys, re
+
+          file_path = sys.argv[1]
+          new_cron = sys.argv[2]
+
+          with open(file_path, "r") as f:
+              content = f.read()
+
+          pattern = r'(- cron: ")[^"]*(")'
+          replacement = rf'\g<1>{new_cron}\g<2>'
+          new_content, count = re.subn(pattern, replacement, content, count=1)
+
+          if count == 0:
+              print("::error::Tidak menemukan baris cron untuk diganti.")
+              sys.exit(1)
+
+          with open(file_path, "w") as f:
+              f.write(new_content)
+
+          print(f"Cron berhasil diubah menjadi: {new_cron}")
+          EOF
+
+      - name: Commit and push
+        run: |
+          set -e
+          git config user.name "ollama-admin-bot"
+          git config user.email "actions@github.com"
+          git add .github/workflows/ollama-run.yml
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan untuk di-commit."
+          else
+            git commit -m "chore: update cron schedule via admin page"
+            for i in 1 2 3; do
+              if git push; then
+                echo "Push berhasil."
+                break
+              fi
+              if [ "$i" = "3" ]; then
+                echo "::error::Gagal push setelah 3 percobaan."
+                exit 1
+              fi
+              git pull --rebase
+              sleep 5
+            done
+          fi
+

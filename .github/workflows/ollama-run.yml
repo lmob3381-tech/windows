@@ -42,7 +42,7 @@ jobs:
             echo "num_ctx=4096" >> "$GITHUB_OUTPUT"
             echo "system_prompt=You are a helpful assistant." >> "$GITHUB_OUTPUT"
             echo "max_run_hours=6" >> "$GITHUB_OUTPUT"
-            echo "webhook_url=none" >> "$GITHUB_OUTPUT"
+            echo "webhook_url=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -52,7 +52,7 @@ jobs:
           NUMCTX=$(jq -r '.num_ctx // 4096' "$CONFIG_FILE")
           SYSPROMPT=$(jq -r '.system_prompt // "You are a helpful assistant."' "$CONFIG_FILE")
           MAXHOURS=$(jq -r '.max_run_hours // 6' "$CONFIG_FILE")
-          WEBHOOK=$(jq -r '.openclaw_webhook_url // "none"' "$CONFIG_FILE")
+          WEBHOOK=$(jq -r '.openclaw_webhook_url // ""' "$CONFIG_FILE")
 
           echo "model=$MODEL" >> "$GITHUB_OUTPUT"
           echo "temperature=$TEMP" >> "$GITHUB_OUTPUT"
@@ -195,7 +195,7 @@ jobs:
           echo "tunnel_url=$URL" >> "$GITHUB_OUTPUT"
 
       - name: Report tunnel URL to OpenClaw (with retry)
-        if: ${{ steps.rules.outputs.webhook_url != none && steps.rules.outputs.webhook_url !=  }}
+        if: "'${{ steps.rules.outputs.webhook_url }}' != ''"
         env:
           WEBHOOK: ${{ steps.rules.outputs.webhook_url }}
           TUNNEL_URL: ${{ steps.tunnel.outputs.tunnel_url }}
@@ -252,7 +252,7 @@ jobs:
           echo "Durasi maksimum tercapai. Menghentikan sesi."
 
       - name: Notify OpenClaw session ended
-        if: ${{ always() && steps.rules.outputs.webhook_url != none && steps.rules.outputs.webhook_url !=  }}
+        if: "always() && '${{ steps.rules.outputs.webhook_url }}' != ''"
         env:
           WEBHOOK: ${{ steps.rules.outputs.webhook_url }}
         run: |
@@ -263,4 +263,4 @@ jobs:
 
       - name: Final status
         if: always()
-        run: echo "Ollama experiment run selesai (run_id ${{ github.run_id }})"
+        run: echo "Ollama experiment run selesai (run_id ${{ github.run_id }})."

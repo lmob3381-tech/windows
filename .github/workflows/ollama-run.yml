@@ -1,79 +1,266 @@
-name: Run Ollama 7B with Cloudflare Tunnel
+name: Ollama Experiment Runner
 
 on:
-  schedule:
-    - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
-      model:
-        description: "Model Ollama yang mau dijalankan"
-        required: false
-        default: "qwen2.5:7b"
-        type: string
       max_hours:
-        description: "Berapa jam server nyala"
+        description: "Durasi maksimum run (jam), hard cap 6"
         required: false
         default: "6"
-        type: string
+      model:
+        description: "Model Ollama yang dipakai"
+        required: false
+        default: "qwen2.5:7b"
+  schedule:
+    - cron: "0 0 31 2 *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ollama-runner
+  cancel-in-progress: false
 
 jobs:
   run-ollama:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-
-    env:
-      OLLAMA_MODEL: ${{ inputs.model || 'qwen2.5:7b' }}
-      MAX_HOURS: ${{ inputs.max_hours || '6' }}
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install Ollama
+      - name: Load LLM rules from config
+        id: rules
         run: |
-          curl -fsSL https://ollama.com/install.sh | sh
+          set -e
+          CONFIG_FILE="config/llm-rules.json"
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "::warning::config/llm-rules.json tidak ditemukan, pakai default."
+            echo "model=qwen2.5:7b" >> "$GITHUB_OUTPUT"
+            echo "temperature=0.7" >> "$GITHUB_OUTPUT"
+            echo "top_p=0.9" >> "$GITHUB_OUTPUT"
+            echo "num_ctx=4096" >> "$GITHUB_OUTPUT"
+            echo "system_prompt=You are a helpful assistant." >> "$GITHUB_OUTPUT"
+            echo "max_run_hours=6" >> "$GITHUB_OUTPUT"
+            echo "webhook_url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-      - name: Start Ollama server (background)
+          MODEL=$(jq -r '.model // "qwen2.5:7b"' "$CONFIG_FILE")
+          TEMP=$(jq -r '.temperature // 0.7' "$CONFIG_FILE")
+          TOPP=$(jq -r '.top_p // 0.9' "$CONFIG_FILE")
+          NUMCTX=$(jq -r '.num_ctx // 4096' "$CONFIG_FILE")
+          SYSPROMPT=$(jq -r '.system_prompt // "You are a helpful assistant."' "$CONFIG_FILE")
+          MAXHOURS=$(jq -r '.max_run_hours // 6' "$CONFIG_FILE")
+          WEBHOOK=$(jq -r '.openclaw_webhook_url // ""' "$CONFIG_FILE")
+
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "temperature=$TEMP" >> "$GITHUB_OUTPUT"
+          echo "top_p=$TOPP" >> "$GITHUB_OUTPUT"
+          echo "num_ctx=$NUMCTX" >> "$GITHUB_OUTPUT"
+          echo "system_prompt=$SYSPROMPT" >> "$GITHUB_OUTPUT"
+          echo "max_run_hours=$MAXHOURS" >> "$GITHUB_OUTPUT"
+          echo "webhook_url=$WEBHOOK" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve final run duration (hard cap 6 jam)
+        id: duration
         run: |
-          nohup ollama serve > ollama.log 2>&1 &
+          INPUT_HOURS="${{ github.event.inputs.max_hours }}"
+          CONFIG_HOURS="${{ steps.rules.outputs.max_run_hours }}"
+          HOURS="${INPUT_HOURS:-$CONFIG_HOURS}"
+          HOURS="${HOURS:-6}"
+
+          case "$HOURS" in
+            "") HOURS=6 ;;
+            *[!0-9.]*) HOURS=6 ;;
+          esac
+
+          IS_OVER=$(awk -v h="$HOURS" 'BEGIN{print (h>6)?1:0}')
+          if [ "$IS_OVER" = "1" ]; then
+            HOURS=6
+          fi
+
+          SECONDS_TOTAL=$(awk -v h="$HOURS" 'BEGIN{printf "%d", h*3600}')
+          echo "hours=$HOURS" >> "$GITHUB_OUTPUT"
+          echo "seconds=$SECONDS_TOTAL" >> "$GITHUB_OUTPUT"
+          echo "Durasi run: ${HOURS} jam (${SECONDS_TOTAL}s)"
+
+      - name: Install Ollama (with retry)
+        run: |
+          set -e
+          for i in 1 2 3; do
+            echo "Percobaan install Ollama ke-$i"
+            if curl -fsSL https://ollama.com/install.sh | sh; then
+              echo "Ollama terinstall."
+              break
+            fi
+            if [ "$i" = "3" ]; then
+              echo "::error::Gagal install Ollama setelah 3 percobaan."
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Start Ollama server
+        env:
+          OLLAMA_HOST: "0.0.0.0:11434"
+          OLLAMA_ORIGINS: "*"
+        run: |
+          export OLLAMA_HOST OLLAMA_ORIGINS
+          nohup ollama serve > /tmp/ollama.log 2>&1 &
           echo "Menunggu Ollama server siap..."
           for i in $(seq 1 30); do
-            if curl -s http://localhost:11434 > /dev/null; then
-              echo "Ollama server siap!"
+            if curl -fsS http://127.0.0.1:11434/api/version > /dev/null 2>&1; then
+              echo "Ollama server siap."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Ollama server tidak merespons setelah 60 detik."
+          cat /tmp/ollama.log || true
+          exit 1
+
+      - name: Pull model (with retry)
+        env:
+          MODEL: ${{ steps.rules.outputs.model }}
+        run: |
+          set -e
+          for i in 1 2 3; do
+            echo "Percobaan pull model '$MODEL' ke-$i"
+            if ollama pull "$MODEL"; then
+              echo "Model $MODEL berhasil di-pull."
+              break
+            fi
+            if [ "$i" = "3" ]; then
+              echo "::error::Gagal pull model $MODEL setelah 3 percobaan."
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: Warm up model
+        env:
+          MODEL: ${{ steps.rules.outputs.model }}
+          SYSPROMPT: ${{ steps.rules.outputs.system_prompt }}
+        run: |
+          set -e
+          curl -fsS http://127.0.0.1:11434/api/generate -d "$(jq -n \
+            --arg model "$MODEL" \
+            --arg prompt "ping" \
+            --arg system "$SYSPROMPT" \
+            '{model:$model, prompt:$prompt, system:$system, stream:false}')" \
+            -o /tmp/warmup.json
+          echo "Warm-up berhasil."
+          cat /tmp/warmup.json
+
+      - name: Install cloudflared
+        run: |
+          set -e
+          for i in 1 2 3; do
+            if curl -fsSL -o /tmp/cloudflared.deb \
+              https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb; then
+              sudo dpkg -i /tmp/cloudflared.deb && echo "cloudflared terinstall." && break
+            fi
+            if [ "$i" = "3" ]; then
+              echo "::error::Gagal install cloudflared."
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Start Cloudflare Quick Tunnel
+        id: tunnel
+        run: |
+          set -e
+          nohup cloudflared tunnel --url http://127.0.0.1:11434 --no-autoupdate \
+            > /tmp/cloudflared.log 2>&1 &
+
+          echo "Menunggu URL tunnel muncul..."
+          URL=""
+          for i in $(seq 1 30); do
+            URL=$(grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" /tmp/cloudflared.log | head -n1 || true)
+            if [ -n "$URL" ]; then
+              echo "Tunnel aktif: $URL"
               break
             fi
             sleep 2
           done
 
-      - name: Pull model ${{ env.OLLAMA_MODEL }}
-        run: |
-          ollama pull "${OLLAMA_MODEL}"
+          if [ -z "$URL" ]; then
+            echo "::error::Gagal mendapatkan URL tunnel setelah 60 detik."
+            cat /tmp/cloudflared.log || true
+            exit 1
+          fi
 
-      - name: Install cloudflared
-        run: |
-          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared.deb
+          echo "tunnel_url=$URL" >> "$GITHUB_OUTPUT"
 
-      - name: Start Cloudflare Quick Tunnel
+      - name: Report tunnel URL to OpenClaw (with retry)
+        if: steps.rules.outputs.webhook_url != ""
+        env:
+          WEBHOOK: ${{ steps.rules.outputs.webhook_url }}
+          TUNNEL_URL: ${{ steps.tunnel.outputs.tunnel_url }}
+          MODEL: ${{ steps.rules.outputs.model }}
         run: |
-          nohup cloudflared tunnel --url http://localhost:11434 > cloudflared.log 2>&1 &
-          echo "Menunggu tunnel siap..."
-          sleep 10
-          echo "=== URL TUNNEL PUBLIK ANDA ==="
-          grep -o "https://[a-zA-Z0-9.-]*\.trycloudflare\.com" cloudflared.log | head -1 || echo "URL belum muncul, cek cloudflared.log"
-          echo "==============================="
-          cat cloudflared.log
+          PAYLOAD=$(jq -n \
+            --arg url "$TUNNEL_URL" \
+            --arg model "$MODEL" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg status "online" \
+            '{tunnel_url:$url, model:$model, run_id:$run_id, status:$status}')
 
-      - name: Jaga server tetap nyala selama durasi yang ditentukan
+          for i in 1 2 3; do
+            echo "Lapor ke OpenClaw, percobaan ke-$i"
+            if curl -fsS -X POST "$WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD"; then
+              echo "Berhasil lapor ke OpenClaw."
+              break
+            fi
+            if [ "$i" = "3" ]; then
+              echo "::warning::Gagal lapor ke OpenClaw setelah 3 percobaan. Tunnel tetap jalan, cek log run untuk URL."
+            fi
+            sleep 5
+          done
+
+      - name: Show tunnel info in summary
+        env:
+          TUNNEL_URL: ${{ steps.tunnel.outputs.tunnel_url }}
+          HOURS: ${{ steps.duration.outputs.hours }}
         run: |
-          sleep $((MAX_HOURS * 3600))
-          echo "Waktu habis, server akan dimatikan."
+          {
+            echo "## Ollama Experiment aktif"
+            echo ""
+            echo "- **Tunnel URL:** $TUNNEL_URL"
+            echo "- **Model:** ${{ steps.rules.outputs.model }}"
+            echo "- **Durasi maksimum:** ${HOURS} jam"
+            echo "- **Run ID:** ${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload log (untuk debugging)
+      - name: Keep alive until max duration, then stop
+        env:
+          RUN_SECONDS: ${{ steps.duration.outputs.seconds }}
+        run: |
+          echo "Menjaga sesi tetap hidup selama ${RUN_SECONDS} detik..."
+          ELAPSED=0
+          INTERVAL=60
+          while [ "$ELAPSED" -lt "$RUN_SECONDS" ]; do
+            sleep "$INTERVAL"
+            ELAPSED=$((ELAPSED + INTERVAL))
+            curl -fsS http://127.0.0.1:11434/api/version > /dev/null 2>&1 || \
+              echo "::warning::Health check gagal pada detik ke-$ELAPSED, lanjut mencoba."
+          done
+          echo "Durasi maksimum tercapai. Menghentikan sesi."
+
+      - name: Notify OpenClaw session ended
+        if: always() && steps.rules.outputs.webhook_url != ""
+        env:
+          WEBHOOK: ${{ steps.rules.outputs.webhook_url }}
+        run: |
+          curl -fsS -X POST "$WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{\x27status\x27:\x27offline\x27,\x27run_id\x27:\x27${{ github.run_id }}\x27}" || \
+            echo "::warning::Gagal lapor status offline, diabaikan (job tetap dianggap sukses)."
+
+      - name: Final status
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs
-          path: |
-            ollama.log
-            cloudflared.log
+        run: echo "Ollama experiment run selesai (run_id ${{ github.run_id }})."

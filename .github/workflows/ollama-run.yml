@@ -10,7 +10,7 @@ on:
       model:
         description: "Model Ollama yang dipakai"
         required: false
-        default: "qwen2.5:7b"
+        default: "qwen2.5:3b"
   schedule:
     - cron: "0 0 31 2 *"
 
@@ -36,7 +36,7 @@ jobs:
           CONFIG_FILE="config/llm-rules.json"
           if [ ! -f "$CONFIG_FILE" ]; then
             echo "::warning::config/llm-rules.json tidak ditemukan, pakai default."
-            echo "model=qwen2.5:7b" >> "$GITHUB_OUTPUT"
+            echo "model=qwen2.5:3b" >> "$GITHUB_OUTPUT"
             echo "temperature=0.7" >> "$GITHUB_OUTPUT"
             echo "top_p=0.9" >> "$GITHUB_OUTPUT"
             echo "num_ctx=4096" >> "$GITHUB_OUTPUT"
@@ -46,7 +46,7 @@ jobs:
             exit 0
           fi
 
-          MODEL=$(jq -r '.model // "qwen2.5:7b"' "$CONFIG_FILE")
+          MODEL=$(jq -r '.model // "qwen2.5:3b"' "$CONFIG_FILE")
           TEMP=$(jq -r '.temperature // 0.7' "$CONFIG_FILE")
           TOPP=$(jq -r '.top_p // 0.9' "$CONFIG_FILE")
           NUMCTX=$(jq -r '.num_ctx // 4096' "$CONFIG_FILE")
@@ -346,4 +346,3 @@ jobs:
       - name: Final status
         if: always()
         run: echo "Ollama experiment run selesai (run_id ${{ github.run_id }})."
-        

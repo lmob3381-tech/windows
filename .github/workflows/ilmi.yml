@@ -2,21 +2,22 @@ name: Ubuntu 22.04 SSH via Tailscale
 
 on:
   workflow_dispatch:
-    inputs:
-      tailscale_authkey:
-        description: 'Tailscale Auth Key (wajib diisi saat mau run)'
-        required: true
-        type: string
 
 jobs:
   run-ubuntu-ssh:
     runs-on: ubuntu-22.04
     steps:
-      - name: Setup Tailscale
-        uses: tailscale/github-action@v3
-        with:
-          authkey: ${{ inputs.tailscale_authkey }}
+      - name: Install & Run Tailscale Native
+        env:
+          # Ganti nilai ini dengan Tailscale Auth Key Anda yang sebenarnya
+          TAILSCALE_AUTHKEY: "tskey-auth-kZG3kY3t5211CNTRL-LtjttLtxggVnz3K17iWggVd3fPk8ERUG"
+        run: |
+          # Install Tailscale langsung ke dalam sistem Ubuntu
+          curl -fsSL https://tailscale.com/install.sh | sh
           
+          # Menjalankan layanan Tailscale dan login menggunakan Auth Key
+          sudo tailscale up --authkey="${TAILSCALE_AUTHKEY}" --hostname="ubuntu-github-runner"
+
       - name: Setup SSH & Password (root:ilmi1234)
         run: |
           # Set password untuk root
@@ -35,21 +36,19 @@ jobs:
 
       - name: Install Antigravity CLI
         run: |
-          # Script instalasi otomatis Antigravity CLI (agy)
-          # Silakan sesuaikan jika ada metode instalasi lain seperti npm (contoh: npm install -g @google/agy)
-          curl -fsSL https://antigravity.google/install.sh | bash
+          # Install Antigravity CLI via snap
+          sudo snap install antigravity-cli
 
       - name: Tampilkan Info & Keep Alive
         run: |
           echo "========================================================="
           echo "✅ Instance Ubuntu 22.04 siap digunakan!"
-          echo "✅ Tailscale berhasil terhubung."
+          echo "✅ Tailscale berjalan secara native di dalam Ubuntu."
           echo "💻 Cara konek:"
-          echo "   1. Buka dashboard Tailscale, lihat IP address mesin ini (biasanya bernama github-runner-xxx)."
-          echo "   2. Jalankan di terminal Anda: ssh root@<IP_TAILSCALE_RUNNER>"
+          echo "   1. Buka dashboard Tailscale, cari device dengan nama 'ubuntu-github-runner'"
+          echo "   2. Jalankan di terminal Anda: ssh root@<IP_TAILSCALE>"
           echo "   3. Masukkan password: ilmi1234"
           echo "========================================================="
           
-          # Sleep infinity digunakan agar workflow tidak langsung berhenti / status sukses sebelum Anda selesai menggunakan servernya
+          # Sleep infinity agar workflow tetap berjalan
           sleep infinity
-          

@@ -1,0 +1,55 @@
+name: Ubuntu 22.04 SSH via Tailscale
+
+on:
+  workflow_dispatch:
+    inputs:
+      tailscale_authkey:
+        description: 'Tailscale Auth Key (wajib diisi saat mau run)'
+        required: true
+        type: string
+
+jobs:
+  run-ubuntu-ssh:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ inputs.tailscale_authkey }}
+          
+      - name: Setup SSH & Password (root:ilmi1234)
+        run: |
+          # Set password untuk root
+          echo "root:ilmi1234" | sudo chpasswd
+          
+          # Konfigurasi SSH agar mengizinkan login root dengan password
+          sudo sed -i 's/^#*PermitRootLogin .*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#*PasswordAuthentication .*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#*KbdInteractiveAuthentication .*/KbdInteractiveAuthentication yes/' /etc/ssh/sshd_config
+          
+          # Hapus file konfigurasi cloud-init yang mungkin menimpa setingan password
+          sudo rm -f /etc/ssh/sshd_config.d/*.conf
+          
+          # Restart layanan SSH
+          sudo systemctl restart ssh
+
+      - name: Install Antigravity CLI
+        run: |
+          # Script instalasi otomatis Antigravity CLI (agy)
+          # Silakan sesuaikan jika ada metode instalasi lain seperti npm (contoh: npm install -g @google/agy)
+          curl -fsSL https://antigravity.google/install.sh | bash
+
+      - name: Tampilkan Info & Keep Alive
+        run: |
+          echo "========================================================="
+          echo "✅ Instance Ubuntu 22.04 siap digunakan!"
+          echo "✅ Tailscale berhasil terhubung."
+          echo "💻 Cara konek:"
+          echo "   1. Buka dashboard Tailscale, lihat IP address mesin ini (biasanya bernama github-runner-xxx)."
+          echo "   2. Jalankan di terminal Anda: ssh root@<IP_TAILSCALE_RUNNER>"
+          echo "   3. Masukkan password: ilmi1234"
+          echo "========================================================="
+          
+          # Sleep infinity digunakan agar workflow tidak langsung berhenti / status sukses sebelum Anda selesai menggunakan servernya
+          sleep infinity
+          

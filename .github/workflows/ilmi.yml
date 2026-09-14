@@ -39,15 +39,34 @@ jobs:
           # Install Antigravity CLI via snap
           sudo snap install antigravity-cli
 
+      - name: Install Hermes Agent
+        env:
+          GOOGLE_API_KEY: "AQ.Ab8RN6KOOQqKljEGzufWM-m_kQWEIyRETKr0UdyjMZVg74_tOQ"
+        run: |
+          # Install Hermes Agent
+          curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
+
+          # Simpan API key ke environment shell
+          echo "export GOOGLE_API_KEY='$GOOGLE_API_KEY'" >> ~/.bashrc
+          export GOOGLE_API_KEY="$GOOGLE_API_KEY"
+
+          echo "✅ Hermes Agent installed"
+          echo "✅ Google AI Studio API key configured"
+
       - name: Tampilkan Info & Keep Alive
         run: |
           echo "========================================================="
           echo "✅ Instance Ubuntu 22.04 siap digunakan!"
           echo "✅ Tailscale berjalan secara native di dalam Ubuntu."
+          echo "✅ Antigravity CLI terinstall."
+          echo "✅ Hermes Agent terinstall."
+          echo "✅ Google AI Studio API key sudah dikonfigurasi."
+          echo ""
           echo "💻 Cara konek:"
           echo "   1. Buka dashboard Tailscale, cari device dengan nama 'ubuntu-github-runner'"
           echo "   2. Jalankan di terminal Anda: ssh root@<IP_TAILSCALE>"
           echo "   3. Masukkan password: ilmi1234"
+          echo "   4. Jalankan Hermes dengan: hermes"
           echo "========================================================="
           
           # Sleep infinity agar workflow tetap berjalan

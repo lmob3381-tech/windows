@@ -36,8 +36,17 @@ jobs:
 
       - name: Install Antigravity CLI
         run: |
-          # Install Antigravity CLI via snap
-          sudo snap install antigravity-cli
+          # Install Antigravity CLI tanpa Snap
+          curl -fsSL https://antigravity.google/cli/install.sh | bash
+
+          # Pastikan CLI masuk PATH
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+          # Verifikasi instalasi
+          agy --version
+
+          echo "✅ Antigravity CLI installed"
 
       - name: Install Hermes Agent
         env:

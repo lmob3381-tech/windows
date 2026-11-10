@@ -1,0 +1,80 @@
+name: AI Motion Graphic Render Engine
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  render-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ffmpeg xvfb \
+            build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
+            libxi-dev libglu1-mesa-dev libglew-dev pkg-config \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+            libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm-dev \
+            fonts-liberation fonts-noto fonts-noto-color-emoji
+
+      - name: Cache Node Modules
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-motion-deps-v1
+
+      - name: Install All Motion Graphic JS Requirements
+        if: steps.cache-npm.outputs.cache-hit != 'true'
+        run: |
+          npm init -y
+          npm install \
+            canvas gl three gsap animejs pixi.js lottie-web p5 d3 \
+            fabric konva matter-js sharp jimp \
+            fluent-ffmpeg @ffmpeg-installer/ffmpeg @ffprobe-installer/ffprobe \
+            puppeteer playwright timecut ccapture.js
+          npx puppeteer browsers install chrome
+
+      - name: Auto-Detect & Install Extra Requirements from render.js
+        run: |
+          if [ -f "render.js" ]; then
+            EXTRAS=$(grep -oE "require\(['\"]([^'\"]+)['\"]\)|from ['\"]([^'\"]+)['\"]" render.js \
+              | sed -E "s/require\(['\"]|['\"]\)|from ['\"]|['\"]//g" \
+              | cut -d'/' -f1,2 \
+              | grep -vE "^\.|^fs$|^path$|^child_process$|^os$|^util$|^stream$|^crypto$|^http$|^https$|^url$|^events$|^buffer$" \
+              | sort -u)
+            for pkg in $EXTRAS; do
+              if [ ! -d "node_modules/$pkg" ]; then
+                npm install "$pkg" --no-save || true
+              fi
+            done
+          fi
+
+      - name: Run JS Motion Graphic Render
+        run: |
+          xvfb-run -a --server-args="-screen 0 1920x1080x24" node render.js
+
+      - name: Upload Rendered Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-motion-graphic
+          path: |
+            *.mp4
+            *.webm
+            *.gif
+            output/*
+          if-no-files-found: error
+          retention-days: 3

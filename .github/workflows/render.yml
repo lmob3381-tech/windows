@@ -23,7 +23,6 @@ jobs:
         run: |
           node -e '
             const fs = require("fs");
-            const vm = require("vm");
             const bt = "\x60";
             let raw = fs.readFileSync("render.js", "utf8")
               .replace(/\r\n/g, "\n")
@@ -65,17 +64,10 @@ jobs:
           echo "selected_model=$SELECTED_MODEL" >> $GITHUB_OUTPUT
           echo "Auto-Detect Result -> needs_voice=$NEEDS_VOICE | selected_model=$SELECTED_MODEL"
 
-      - name: Verify System Dependencies (Fast Skip if Pre-installed)
-        run: |
-          if command -v ffmpeg &> /dev/null && command -v xvfb-run &> /dev/null; then
-            echo "⚡ ffmpeg dan xvfb-run sudah tersedia di runner! Melewati apt-get install."
-          else
-            sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg xvfb || true
-          fi
-
       - name: Install Neural Voice Engine (Only When Needed by render.js)
         if: steps.detect-voice.outputs.needs_voice == 'true'
         run: |
+          echo "🎙️ Mengaktifkan Engine Suara Neural via PyPI HTTPS (tanpa apt-get)..."
           pip3 install --quiet edge-tts gTTS --break-system-packages || pip3 install --quiet edge-tts gTTS || true
 
       - name: Cache Node Modules
@@ -102,6 +94,28 @@ jobs:
             google-tts-api node-gtts gtts \
             puppeteer playwright
           npm install --legacy-peer-deps canvas || true
+
+      - name: Fast Link Static FFmpeg & FFprobe (Zero apt-get, < 1 sec)
+        run: |
+          # Langsung gunakan binary statis dari paket NPM agar tidak menyentuh apt-get Ubuntu sama sekali!
+          if ! command -v ffmpeg &> /dev/null; then
+            FFMPEG_BIN=$(node -e "try { console.log(require('ffmpeg-static') || require('@ffmpeg-installer/ffmpeg').path); } catch(e) {}" 2>/dev/null || true)
+            if [ -n "$FFMPEG_BIN" ] && [ -f "$FFMPEG_BIN" ]; then
+              sudo chmod +x "$FFMPEG_BIN"
+              sudo ln -sf "$FFMPEG_BIN" /usr/local/bin/ffmpeg
+              echo "⚡ Berhasil menautkan ffmpeg statis ke /usr/local/bin/ffmpeg!"
+            fi
+          fi
+          if ! command -v ffprobe &> /dev/null; then
+            FFPROBE_BIN=$(node -e "try { console.log(require('@ffprobe-installer/ffprobe').path); } catch(e) {}" 2>/dev/null || true)
+            if [ -n "$FFPROBE_BIN" ] && [ -f "$FFPROBE_BIN" ]; then
+              sudo chmod +x "$FFPROBE_BIN"
+              sudo ln -sf "$FFPROBE_BIN" /usr/local/bin/ffprobe
+              echo "⚡ Berhasil menautkan ffprobe statis ke /usr/local/bin/ffprobe!"
+            fi
+          fi
+          ffmpeg -version | head -n 1 || true
+          ffprobe -version | head -n 1 || true
 
       - name: Auto-Detect & Install Extra Requirements from render.js
         env:

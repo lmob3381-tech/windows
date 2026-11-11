@@ -30,7 +30,6 @@ jobs:
               NEEDS_VOICE="true"
             fi
 
-            # Cek apakah render.js menyebut salah satu nama stock model secara spesifik
             EXPLICIT_MODEL=$(grep -oE "(id_andrew_studio|id_ava_studio|id_brian_narrator|id_emma_story|id_remy_docu|id_vivienne_soft|id_florian_tech|id_seraphina_calm|id_ardi_pro|id_ardi_fast|id_ardi_cinema|id_gadis_natural|id_gadis_ceria|id_gadis_news|eleven_adam|eleven_antoni|eleven_rachel|eleven_bella|eleven_josh|eleven_callum|eleven_charlotte|char_ulasan_tekno|char_mekanik_ahli|char_instruktur|char_dokumenter)" render.js | head -n 1 || true)
 
             if [ -n "$EXPLICIT_MODEL" ]; then
@@ -46,7 +45,7 @@ jobs:
 
           echo "needs_voice=$NEEDS_VOICE" >> $GITHUB_OUTPUT
           echo "selected_model=$SELECTED_MODEL" >> $GITHUB_OUTPUT
-          echo "Auto-Detect Result -> needs_voice=$NEEDS_VOICE \vert{} selected_model=$SELECTED_MODEL"
+          echo "Auto-Detect Result -> needs_voice=$NEEDS_VOICE | selected_model=$SELECTED_MODEL"
 
       - name: Install System Dependencies
         run: |
@@ -127,9 +126,42 @@ jobs:
           DEFAULT_VOICE_MODEL: ${{ steps.detect-voice.outputs.selected_model }}
         run: |
           cat << 'PRELOAD_EOF' > preload_fix.js
-          const { execSync } = require('child_process');
+          const child_process = require('child_process');
+          const { execSync } = child_process;
           const https = require('https');
           const fs = require('fs');
+
+          // 0. PROTEKSI ANTI-EPIPE PADA FFMPEG SPAWN
+          // Mencegah crash "Error: write EPIPE" ketika durasi audio/filter lebih pendek dari jumlah frame
+          const origSpawn = child_process.spawn;
+          child_process.spawn = function(command, args, options) {
+            if (Array.isArray(args) && String(command).toLowerCase().includes('ffmpeg')) {
+              // Hapus flag -shortest yang sering membuat FFmpeg menutup pipa sebelum frame habis
+              args = args.filter(arg => arg !== '-shortest');
+            }
+            const proc = origSpawn.call(this, command, args, options);
+            if (proc && proc.stdin) {
+              proc.stdin.on('error', (err) => {
+                if (err && (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED' || err.code === 'EOF')) {
+                  return; // Abaikan EPIPE agar proses utama tidak crash
+                }
+              });
+              const origWrite = proc.stdin.write.bind(proc.stdin);
+              proc.stdin.write = function(chunk, encoding, cb) {
+                if (!proc.stdin.writable || proc.stdin.destroyed || proc.killed || proc.exitCode !== null) {
+                  if (typeof encoding === 'function') encoding();
+                  else if (typeof cb === 'function') cb();
+                  return false;
+                }
+                try {
+                  return origWrite(chunk, encoding, cb);
+                } catch (e) {
+                  return false;
+                }
+              };
+            }
+            return proc;
+          };
 
           // 1. Pastikan @napi-rs/canvas memiliki fungsi canvas.data() yang mengeluarkan Buffer RGBA murni
           try {
@@ -146,43 +178,35 @@ jobs:
             };
           } catch (e) {}
 
-          // 2. Katalog Stock Model Suara Neural (Kualitas Studio Rapi Setara ElevenLabs)
+          // 2. Katalog Stock Model Suara Neural
           const VOICE_STOCK_MODELS = {
-            // Multilingual Neural (Sangat natural, mendukung Bahasa Indonesia dengan intonasi manusia luwes)
-            id_andrew_studio:   { voice: 'en-US-AndrewMultilingualNeural',   pitch: '+0Hz', rate: '+4%',  preset: 'studio_warm',  desc: 'Pria Studio Hangat & Rapi (Mirip ElevenLabs Brian/Adam)' },
-            id_ava_studio:      { voice: 'en-US-AvaMultilingualNeural',      pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp', desc: 'Wanita Studio Jernih & Ekspresif (Mirip ElevenLabs Rachel)' },
-            id_brian_narrator:  { voice: 'en-US-BrianMultilingualNeural',    pitch: '-2Hz', rate: '+3%',  preset: 'cinema_deep',  desc: 'Pria Narator Sinematik Berat (Cocok untuk Dokumenter/Mesin)' },
-            id_emma_story:      { voice: 'en-US-EmmaMultilingualNeural',     pitch: '+1Hz', rate: '+2%',  preset: 'studio_crisp', desc: 'Wanita Storytelling Halus (Mirip ElevenLabs Bella)' },
-            id_remy_docu:       { voice: 'fr-FR-RemyMultilingualNeural',     pitch: '-1Hz', rate: '+3%',  preset: 'studio_warm',  desc: 'Pria Intonasi Kalem & Berwibawa' },
-            id_vivienne_soft:   { voice: 'fr-FR-VivienneMultilingualNeural', pitch: '+0Hz', rate: '+0%',  preset: 'studio_crisp', desc: 'Wanita Lembut & Elegan' },
-            id_florian_tech:    { voice: 'de-DE-FlorianMultilingualNeural',  pitch: '-1Hz', rate: '+5%',  preset: 'cinema_deep',  desc: 'Pria Reviewer Teknologi Modern' },
-            id_seraphina_calm:  { voice: 'de-DE-SeraphinaMultilingualNeural',pitch: '+0Hz', rate: '+0%',  preset: 'studio_crisp', desc: 'Wanita Narator Edukasi Tenang' },
-
-            // Native Indonesian Neural (Logat Indonesia Asli)
-            id_ardi_pro:        { voice: 'id-ID-ArdiNeural',                 pitch: '-1Hz', rate: '+5%',  preset: 'studio_warm',  desc: 'Pria Indonesia Profesional & Tegas' },
-            id_ardi_fast:       { voice: 'id-ID-ArdiNeural',                 pitch: '+0Hz', rate: '+14%', preset: 'studio_crisp', desc: 'Pria Indonesia Cepat & Enerjik (Reels/Shorts)' },
-            id_ardi_cinema:     { voice: 'id-ID-ArdiNeural',                 pitch: '-4Hz', rate: '-2%',  preset: 'cinema_deep',  desc: 'Pria Indonesia Bass Dalam Sinematik' },
-            id_gadis_natural:   { voice: 'id-ID-GadisNeural',                pitch: '+0Hz', rate: '+4%',  preset: 'studio_crisp', desc: 'Wanita Indonesia Natural & Ramah' },
-            id_gadis_ceria:     { voice: 'id-ID-GadisNeural',                pitch: '+3Hz', rate: '+10%', preset: 'studio_crisp', desc: 'Wanita Indonesia Ceria & Semangat' },
-            id_gadis_news:      { voice: 'id-ID-GadisNeural',                pitch: '-1Hz', rate: '+6%',  preset: 'studio_warm',  desc: 'Wanita Indonesia Pembaca Berita Formal' },
-
-            // English / Global ElevenLabs Style Presets
-            eleven_adam:        { voice: 'en-US-ChristopherNeural',          pitch: '-3Hz', rate: '+2%',  preset: 'cinema_deep',  desc: 'Deep American Male Narrator (Adam Style)' },
-            eleven_antoni:      { voice: 'en-US-EricNeural',                 pitch: '-1Hz', rate: '+4%',  preset: 'studio_warm',  desc: 'Crisp Well-Rounded Male (Antoni Style)' },
-            eleven_rachel:      { voice: 'en-US-AriaNeural',                 pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp', desc: 'Calm Conversational Female (Rachel Style)' },
-            eleven_bella:       { voice: 'en-US-JennyNeural',                pitch: '+1Hz', rate: '+0%',  preset: 'studio_crisp', desc: 'Soft Storytelling Female (Bella Style)' },
-            eleven_josh:        { voice: 'en-US-GuyNeural',                  pitch: '-2Hz', rate: '+3%',  preset: 'studio_warm',  desc: 'Young Dynamic Male (Josh Style)' },
-            eleven_callum:      { voice: 'en-GB-RyanNeural',                 pitch: '-2Hz', rate: '+2%',  preset: 'cinema_deep',  desc: 'British Documentary Male (Callum Style)' },
-            eleven_charlotte:   { voice: 'en-GB-SoniaNeural',                pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp', desc: 'British Articulate Female (Charlotte Style)' },
-
-            // Preset Karakter Khusus
-            char_ulasan_tekno:  { voice: 'en-US-AndrewMultilingualNeural',   pitch: '-1Hz', rate: '+8%',  preset: 'studio_warm',  desc: 'Gaya Reviewer Gadget/Otomotif' },
-            char_mekanik_ahli:  { voice: 'id-ID-ArdiNeural',                 pitch: '-2Hz', rate: '+4%',  preset: 'cinema_deep',  desc: 'Gaya Instruktur Bengkel / Mekanik' },
-            char_instruktur:    { voice: 'id-ID-GadisNeural',                pitch: '+0Hz', rate: '+5%',  preset: 'studio_warm',  desc: 'Gaya Guru / Presentasi Kelas' },
-            char_dokumenter:    { voice: 'en-US-BrianMultilingualNeural',    pitch: '-3Hz', rate: '+0%',  preset: 'cinema_deep',  desc: 'Gaya Narator National Geographic' }
+            id_andrew_studio:   { voice: 'en-US-AndrewMultilingualNeural',   pitch: '+0Hz', rate: '+4%',  preset: 'studio_warm' },
+            id_ava_studio:      { voice: 'en-US-AvaMultilingualNeural',      pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp' },
+            id_brian_narrator:  { voice: 'en-US-BrianMultilingualNeural',    pitch: '-2Hz', rate: '+3%',  preset: 'cinema_deep' },
+            id_emma_story:      { voice: 'en-US-EmmaMultilingualNeural',     pitch: '+1Hz', rate: '+2%',  preset: 'studio_crisp' },
+            id_remy_docu:       { voice: 'fr-FR-RemyMultilingualNeural',     pitch: '-1Hz', rate: '+3%',  preset: 'studio_warm' },
+            id_vivienne_soft:   { voice: 'fr-FR-VivienneMultilingualNeural', pitch: '+0Hz', rate: '+0%',  preset: 'studio_crisp' },
+            id_florian_tech:    { voice: 'de-DE-FlorianMultilingualNeural',  pitch: '-1Hz', rate: '+5%',  preset: 'cinema_deep' },
+            id_seraphina_calm:  { voice: 'de-DE-SeraphinaMultilingualNeural',pitch: '+0Hz', rate: '+0%',  preset: 'studio_crisp' },
+            id_ardi_pro:        { voice: 'id-ID-ArdiNeural',                 pitch: '-1Hz', rate: '+5%',  preset: 'studio_warm' },
+            id_ardi_fast:       { voice: 'id-ID-ArdiNeural',                 pitch: '+0Hz', rate: '+14%', preset: 'studio_crisp' },
+            id_ardi_cinema:     { voice: 'id-ID-ArdiNeural',                 pitch: '-4Hz', rate: '-2%',  preset: 'cinema_deep' },
+            id_gadis_natural:   { voice: 'id-ID-GadisNeural',                pitch: '+0Hz', rate: '+4%',  preset: 'studio_crisp' },
+            id_gadis_ceria:     { voice: 'id-ID-GadisNeural',                pitch: '+3Hz', rate: '+10%', preset: 'studio_crisp' },
+            id_gadis_news:      { voice: 'id-ID-GadisNeural',                pitch: '-1Hz', rate: '+6%',  preset: 'studio_warm' },
+            eleven_adam:        { voice: 'en-US-ChristopherNeural',          pitch: '-3Hz', rate: '+2%',  preset: 'cinema_deep' },
+            eleven_antoni:      { voice: 'en-US-EricNeural',                 pitch: '-1Hz', rate: '+4%',  preset: 'studio_warm' },
+            eleven_rachel:      { voice: 'en-US-AriaNeural',                 pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp' },
+            eleven_bella:       { voice: 'en-US-JennyNeural',                pitch: '+1Hz', rate: '+0%',  preset: 'studio_crisp' },
+            eleven_josh:        { voice: 'en-US-GuyNeural',                  pitch: '-2Hz', rate: '+3%',  preset: 'studio_warm' },
+            eleven_callum:      { voice: 'en-GB-RyanNeural',                 pitch: '-2Hz', rate: '+2%',  preset: 'cinema_deep' },
+            eleven_charlotte:   { voice: 'en-GB-SoniaNeural',                pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp' },
+            char_ulasan_tekno:  { voice: 'en-US-AndrewMultilingualNeural',   pitch: '-1Hz', rate: '+8%',  preset: 'studio_warm' },
+            char_mekanik_ahli:  { voice: 'id-ID-ArdiNeural',                 pitch: '-2Hz', rate: '+4%',  preset: 'cinema_deep' },
+            char_instruktur:    { voice: 'id-ID-GadisNeural',                pitch: '+0Hz', rate: '+5%',  preset: 'studio_warm' },
+            char_dokumenter:    { voice: 'en-US-BrianMultilingualNeural',    pitch: '-3Hz', rate: '+0%',  preset: 'cinema_deep' }
           };
 
-          // Filter Audio Mastering FFmpeg agar suara terdengar padat, hangat, dan rapi seperti ElevenLabs
           const AUDIO_MASTERING_FILTERS = {
             studio_warm:  'highpass=f=75,equalizer=f=180:width_type=o:width=1.2:g=2.5,equalizer=f=3500:width_type=o:width=1.5:g=2.0,acompressor=threshold=-18dB:ratio=3:attack=15:release=150:makeup=2dB,alimiter=limit=0.95',
             studio_crisp: 'highpass=f=85,equalizer=f=220:width_type=o:width=1.2:g=1.5,equalizer=f=4500:width_type=o:width=1.5:g=3.0,acompressor=threshold=-16dB:ratio=2.8:attack=10:release=120:makeup=2dB,alimiter=limit=0.95',
@@ -191,19 +215,15 @@ jobs:
 
           global.VOICE_STOCK_MODELS = VOICE_STOCK_MODELS;
 
-          // Fungsi pembangkit suara kualitas ElevenLabs yang bisa dipanggil langsung dari render.js
-          // atau otomatis menggantikan request TTS standar
           function synthesizeStudioVoice(text, outputMp3Path, requestedModelKey) {
             const activeKey = requestedModelKey || process.env.VOICE_MODEL || process.env.DEFAULT_VOICE_MODEL || 'id_andrew_studio';
             const cfg = VOICE_STOCK_MODELS[activeKey] || VOICE_STOCK_MODELS['id_andrew_studio'];
             const rawMp3 = `/tmp/raw_tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;
-
             let success = false;
 
-            // Prioritas 1: Gunakan ElevenLabs API asli jika user menyediakan ELEVENLABS_API_KEY di environment/JS
             if (process.env.ELEVENLABS_API_KEY) {
               try {
-                const voiceId = process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB'; // Default Adam
+                const voiceId = process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB';
                 const payload = JSON.stringify({
                   text: text,
                   model_id: 'eleven_multilingual_v2',
@@ -213,7 +233,7 @@ jobs:
                   `curl -s -f -X POST "[https://api.elevenlabs.io/v1/text-to-speech/$](https://api.elevenlabs.io/v1/text-to-speech/$){voiceId}" ` +
                   `-H "xi-api-key: ${process.env.ELEVENLABS_API_KEY}" ` +
                   `-H "Content-Type: application/json" ` +
-                  `-d '${payload.replace(/'/g, "'\\''")}' -o "${ outputMp3Path }"`,
+                  `-d '${payload.replace(/'/g, "'\\''")}' -o "${outputMp3Path}"`,
                   { stdio: 'ignore' }
                 );
                 if (fs.existsSync(outputMp3Path) && fs.statSync(outputMp3Path).size > 500) {
@@ -222,13 +242,7 @@ jobs:
               } catch (e) {}
             }
 
-            // Prioritas 2: Neural Engine (edge-tts) + Studio Audio Mastering (Setara ElevenLabs)
-            const candidates = [
-              cfg,
-              VOICE_STOCK_MODELS['id_ardi_pro'],
-              VOICE_STOCK_MODELS['id_gadis_natural']
-            ];
-
+            const candidates = [cfg, VOICE_STOCK_MODELS['id_ardi_pro'], VOICE_STOCK_MODELS['id_gadis_natural']];
             for (const cand of candidates) {
               try {
                 execSync(
@@ -248,7 +262,6 @@ jobs:
               } catch (err) {}
             }
 
-            // Prioritas 3: Fallback ke gTTS jika edge-tts sedang gangguan jaringan
             if (!success) {
               try {
                 execSync(`gtts-cli -l id ${JSON.stringify(text)} --output "${rawMp3}"`, { stdio: 'ignore' });
@@ -260,13 +273,11 @@ jobs:
                 execSync(`ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 3 -q:a 9 -acodec libmp3lame "${outputMp3Path}"`, { stdio: 'ignore' });
               }
             }
-
             return outputMp3Path;
           }
 
           global.generateStudioVoice = synthesizeStudioVoice;
 
-          // 3. Hanya aktifkan interceptor TTS jika render.js memang terdeteksi memakai suara (Auto-Detect)
           if (process.env.NEEDS_VOICE === 'true') {
             const origGet = https.get;
             https.get = function(url, options, cb) {
@@ -275,9 +286,6 @@ jobs:
                 options = {};
               }
               const urlStr = typeof url === 'string' ? url : (url && url.href ? url.href : '');
-
-              // Jika render.js memanggil Google Translate TTS / endpoint TTS standar,
-              // otomatis alihkan ke Stock Model Neural Studio (Setara ElevenLabs) agar suaranya rapi!
               if (urlStr.includes('[translate.google.com/translate_tts](https://translate.google.com/translate_tts)') || urlStr.includes('tts://')) {
                 try {
                   const parsed = new URL(urlStr.replace('tts://', '[https://tts.local/](https://tts.local/)?'));
@@ -302,66 +310,8 @@ jobs:
           }
           PRELOAD_EOF
 
-          # Jika render.js menggunakan atempo=1.18 untuk mempercepat suara robot Google TTS lama,
-          # normalkan menjadi atempo=1.00 karena suara Neural Studio sudah memiliki tempo natural & rapi
           if [ "$NEEDS_VOICE" == "true" ] && [ -f "render.js" ]; then
             sed -i 's/atempo=1.18/atempo=1.02/g' render.js || true
-          fi
-
-          # Auto-Fix SyntaxError pada render.js sebelum dijalankan
-          if [ -f "render.js" ]; then
-            node -e '
-              const fs = require("fs");
-              const vm = require("vm");
-              let raw = fs.readFileSync("render.js", "utf8").replace(/\r\n/g, "\n").replace(/^\s*```[a-zA-Z]*\s*$/gm, "");
-              const lines = raw.split("\n");
-              const tryFixLine = (line) => {
-                const cands = [
-                  line.replace(/``+/g, "`"),
-                  line.replace(/`([^`]*\$\{[^`]*?)["\x27](\s*[;,)\]]*\s*(?:\/\/.*)?)$/, "`$1`$2"),
-                  line.replace(/["\x27]([^"\x27]*\$\{[^"\x27]*?)`/g, "`$1`"),
-                  line.replace(/(`[^`]*\$\{[^`]*?)(\s*[;,)\]]*\s*(?:\/\/.*)?)$/, "$1`$2"),
-                  line.replace(/(["\x27])([^"\x27`]*?)`/g, "$1$2$1"),
-                  line.replace(/`([^"\x27`]*?)(["\x27])/g, "$2$1$2"),
-                  line + "`",
-                  line + "\"",
-                  line + "\x27"
-                ];
-                return cands;
-              };
-              for (let pass = 0; pass < 15; pass++) {
-                try { new vm.Script(lines.join("\n"), { filename: "render.js" }); break; } catch (e) {
-                  const m = ((e && e.stack) || "").match(/render\.js:(\d+)/);
-                  if (!m) break;
-                  const errLine = parseInt(m[1], 10) - 1;
-                  let fixed = false;
-                  for (let i = errLine; i >= Math.max(0, errLine - 40); i--) {
-                    const orig = lines[i];
-                    for (const cand of tryFixLine(orig)) {
-                      if (cand === orig) continue;
-                      lines[i] = cand;
-                      try {
-                        new vm.Script(lines.join("\n"), { filename: "render.js" });
-                        console.log("[Auto-Fix] Memperbaiki syntax render.js pada baris " + (i + 1));
-                        fixed = true;
-                        break;
-                      } catch (e2) {
-                        const m2 = ((e2 && e2.stack) || "").match(/render\.js:(\d+)/);
-                        if (m2 && parseInt(m2[1], 10) - 1 > errLine) {
-                          console.log("[Auto-Fix] Memperbaiki syntax render.js pada baris " + (i + 1));
-                          fixed = true;
-                          break;
-                        }
-                      }
-                    }
-                    if (fixed) break;
-                    lines[i] = orig;
-                  }
-                  if (!fixed) break;
-                }
-              }
-              fs.writeFileSync("render.js", lines.join("\n"), "utf8");
-            ' || true
           fi
 
       - name: Run JS Motion Graphic Render

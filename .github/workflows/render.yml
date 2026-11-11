@@ -47,30 +47,28 @@ jobs:
           echo "selected_model=$SELECTED_MODEL" >> $GITHUB_OUTPUT
           echo "Auto-Detect Result -> needs_voice=$NEEDS_VOICE | selected_model=$SELECTED_MODEL"
 
-      - name: Install System Dependencies
+      - name: Verify System Dependencies (Fast Skip if Pre-installed)
         run: |
-          # Bypass mirror azure.archive.ubuntu.com yang sering timeout/Ign di GitHub Runner Ubuntu 24.04
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            printf "http://archive.ubuntu.com/ubuntu/\nhttp://security.ubuntu.com/ubuntu/\n" | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          # Pada GitHub Actions ubuntu-latest, ffmpeg, xvfb-run, Chrome, dan font sudah terinstall bawaan!
+          # Lewati apt-get sepenuhnya agar tidak terjebak timeout mirror archive.ubuntu.com (hemat 15+ menit).
+          if command -v ffmpeg &> /dev/null && command -v xvfb-run &> /dev/null; then
+            echo "⚡ ffmpeg dan xvfb-run sudah tersedia di runner! Melewati apt-get install."
+          else
+            echo "Mengonfigurasi DNS & mirror HTTPS cadangan..."
+            printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" | sudo tee /etc/resolv.conf > /dev/null || true
+            if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+              sudo sed -i 's|http://.*archive.ubuntu.com/ubuntu/|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources || true
+              sudo sed -i 's|http://security.ubuntu.com/ubuntu/|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources || true
+            fi
+            sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=2 -o Acquire::http::Timeout="5" update || true
+            sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends ffmpeg xvfb || true
           fi
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
-
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout="10" -o Acquire::https::Timeout="10" update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout="10" install -y --no-install-recommends \
-            ffmpeg xvfb \
-            build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
-            libxi-dev libglu1-mesa-dev libglew-dev pkg-config \
-            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-            libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm-dev \
-            fonts-liberation fonts-noto-core fonts-noto-color-emoji
 
       - name: Install Neural Voice Engine (Only When Needed by render.js)
         if: steps.detect-voice.outputs.needs_voice == 'true'
         run: |
-          echo "🎙️ Mengaktifkan Engine Suara Neural karena render.js membutuhkan narasi..."
-          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout="10" install -y --no-install-recommends espeak-ng python3-pip python3-setuptools
-          pip3 install edge-tts gTTS --break-system-packages || pip3 install edge-tts gTTS || true
+          echo "🎙️ Mengaktifkan Engine Suara Neural via PyPI HTTPS (tanpa apt-get)..."
+          pip3 install --quiet edge-tts gTTS --break-system-packages || pip3 install --quiet edge-tts gTTS || true
 
       - name: Cache Node Modules
         id: cache-npm
@@ -79,23 +77,28 @@ jobs:
           path: |
             node_modules
             package.json
-          key: ${{ runner.os }}-motion-deps-v3
+          key: ${{ runner.os }}-motion-deps-v4
 
       - name: Install All Motion Graphic JS Requirements
         if: steps.cache-npm.outputs.cache-hit != 'true'
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: |
           npm init -y
           npm install --legacy-peer-deps \
             @napi-rs/canvas ffmpeg-static \
-            canvas three gsap animejs pixi.js lottie-web p5 d3 \
+            three gsap animejs pixi.js lottie-web p5 d3 \
             fabric konva matter-js sharp jimp \
             fluent-ffmpeg @ffmpeg-installer/ffmpeg @ffprobe-installer/ffprobe \
             google-tts-api node-gtts gtts \
             puppeteer playwright
-          npm install --legacy-peer-deps gl timecut ccapture.js || true
-          npx puppeteer browsers install chrome || true
+          npm install --legacy-peer-deps canvas || true
 
       - name: Auto-Detect & Install Extra Requirements from render.js
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: |
           if [ ! -f "package.json" ]; then
             npm init -y
@@ -133,24 +136,36 @@ jobs:
           DEFAULT_VOICE_MODEL: ${{ steps.detect-voice.outputs.selected_model }}
         run: |
           cat << 'PRELOAD_EOF' > preload_fix.js
+          const Module = require('module');
           const child_process = require('child_process');
           const { execFileSync } = child_process;
           const https = require('https');
           const fs = require('fs');
 
-          // 0. PROTEKSI ANTI-EPIPE PADA FFMPEG SPAWN
-          // Mencegah crash "Error: write EPIPE" ketika durasi audio/filter lebih pendek dari jumlah frame
+          // 0a. Fallback otomatis require('canvas') ke '@napi-rs/canvas' jika paket native canvas tidak ada
+          const origLoad = Module._load;
+          Module._load = function(request, parent, isMain) {
+            if (request === 'canvas') {
+              try {
+                return origLoad.apply(this, arguments);
+              } catch (e) {
+                return origLoad.call(this, '@napi-rs/canvas', parent, isMain);
+              }
+            }
+            return origLoad.apply(this, arguments);
+          };
+
+          // 0b. PROTEKSI ANTI-EPIPE PADA FFMPEG SPAWN
           const origSpawn = child_process.spawn;
           child_process.spawn = function(command, args, options) {
             if (Array.isArray(args) && String(command).toLowerCase().includes('ffmpeg')) {
-              // Hapus flag -shortest yang sering membuat FFmpeg menutup pipa sebelum frame habis
               args = args.filter(arg => arg !== '-shortest');
             }
             const proc = origSpawn.call(this, command, args, options);
             if (proc && proc.stdin) {
               proc.stdin.on('error', (err) => {
                 if (err && (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED' || err.code === 'EOF')) {
-                  return; // Abaikan EPIPE agar proses utama tidak crash
+                  return;
                 }
               });
               const origWrite = proc.stdin.write.bind(proc.stdin);
@@ -340,6 +355,7 @@ jobs:
         env:
           NEEDS_VOICE: ${{ steps.detect-voice.outputs.needs_voice }}
           DEFAULT_VOICE_MODEL: ${{ steps.detect-voice.outputs.selected_model }}
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome-stable
         run: |
           xvfb-run -a --server-args="-screen 0 1920x1080x24" node --require ./preload_fix.js render.js
 

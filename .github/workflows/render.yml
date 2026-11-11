@@ -19,16 +19,51 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Auto-Detect Voice & Model Requirements from render.js
+        id: detect-voice
+        run: |
+          NEEDS_VOICE="false"
+          SELECTED_MODEL="id_andrew_studio"
+
+          if [ -f "render.js" ]; then
+            if grep -qiE "voiceText|translate_tts|VOICE_MODEL|VOICE_ID|edge-tts|elevenlabs|gtts|tts|narasi|speak|voiceover|\.mp3" render.js; then
+              NEEDS_VOICE="true"
+            fi
+
+            # Cek apakah render.js menyebut salah satu nama stock model secara spesifik
+            EXPLICIT_MODEL=$(grep -oE "(id_andrew_studio|id_ava_studio|id_brian_narrator|id_emma_story|id_remy_docu|id_vivienne_soft|id_florian_tech|id_seraphina_calm|id_ardi_pro|id_ardi_fast|id_ardi_cinema|id_gadis_natural|id_gadis_ceria|id_gadis_news|eleven_adam|eleven_antoni|eleven_rachel|eleven_bella|eleven_josh|eleven_callum|eleven_charlotte|char_ulasan_tekno|char_mekanik_ahli|char_instruktur|char_dokumenter)" render.js | head -n 1 || true)
+
+            if [ -n "$EXPLICIT_MODEL" ]; then
+              SELECTED_MODEL="$EXPLICIT_MODEL"
+            elif grep -qiE "perempuan|wanita|cewek|gadis|female|bella|rachel|ava|emma" render.js; then
+              SELECTED_MODEL="id_ava_studio"
+            elif grep -qiE "mesin|motor|teknik|mekanik|otomotif|piston|silinder" render.js; then
+              SELECTED_MODEL="id_andrew_studio"
+            elif grep -qiE "dokumenter|sejarah|misteri|cinema|film" render.js; then
+              SELECTED_MODEL="id_brian_narrator"
+            fi
+          fi
+
+          echo "needs_voice=$NEEDS_VOICE" >> $GITHUB_OUTPUT
+          echo "selected_model=$SELECTED_MODEL" >> $GITHUB_OUTPUT
+          echo "Auto-Detect Result -> needs_voice=$NEEDS_VOICE | selected_model=$SELECTED_MODEL"
+
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            ffmpeg xvfb espeak-ng python3-pip python3-setuptools \
+            ffmpeg xvfb \
             build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
             libxi-dev libglu1-mesa-dev libglew-dev pkg-config \
             libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
             libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm-dev \
             fonts-liberation fonts-noto fonts-noto-color-emoji
+
+      - name: Install Neural Voice Engine (Only When Needed by render.js)
+        if: steps.detect-voice.outputs.needs_voice == 'true'
+        run: |
+          echo "🎙️ Mengaktifkan Engine Suara Neural karena render.js membutuhkan narasi..."
+          sudo apt-get install -y espeak-ng python3-pip python3-setuptools
           pip3 install edge-tts gTTS --break-system-packages || pip3 install edge-tts gTTS || true
 
       - name: Cache Node Modules
@@ -38,7 +73,7 @@ jobs:
           path: |
             node_modules
             package.json
-          key: ${{ runner.os }}-motion-deps-v2
+          key: ${{ runner.os }}-motion-deps-v3
 
       - name: Install All Motion Graphic JS Requirements
         if: steps.cache-npm.outputs.cache-hit != 'true'
@@ -70,20 +105,17 @@ jobs:
             done
           fi
 
-      - name: Prepare Compatibility & TTS Fallback Layer
+      - name: Prepare Stock Voice Models & Compatibility Layer
+        env:
+          NEEDS_VOICE: ${{ steps.detect-voice.outputs.needs_voice }}
+          DEFAULT_VOICE_MODEL: ${{ steps.detect-voice.outputs.selected_model }}
         run: |
-          # Perbaiki parameter client Google TTS yang sering terkena blokir 404/403 di server GitHub
-          if [ -f "render.js" ]; then
-            sed -i 's/client=tw-ob/client=gtx/g' render.js || true
-          fi
-
-          # Buat preload helper untuk memastikan canvas.data() RGBA & fallback suara TTS otomatis
           cat << 'PRELOAD_EOF' > preload_fix.js
           const { execSync } = require('child_process');
           const https = require('https');
           const fs = require('fs');
 
-          // 1. Pastikan @napi-rs/canvas mengembalikan buffer RGBA murni saat canvas.data() dipanggil
+          // 1. Pastikan @napi-rs/canvas memiliki fungsi canvas.data() yang mengeluarkan Buffer RGBA murni
           try {
             const napiCanvas = require('@napi-rs/canvas');
             const origCreateCanvas = napiCanvas.createCanvas;
@@ -98,45 +130,172 @@ jobs:
             };
           } catch (e) {}
 
-          // 2. Fallback otomatis ke edge-tts / ffmpeg jika Google Translate TTS gagal di IP GitHub Actions
-          const origGet = https.get;
-          https.get = function(url, options, cb) {
-            if (typeof options === 'function') {
-              cb = options;
-              options = {};
-            }
-            const urlStr = typeof url === 'string' ? url : (url && url.href ? url.href : '');
-            if (urlStr.includes('translate.google.com/translate_tts')) {
-              return origGet.call(https, url, options, (res) => {
-                if (res.statusCode !== 200) {
-                  try {
-                    const parsed = new URL(urlStr);
-                    const text = parsed.searchParams.get('q') || 'Mesin empat tak';
-                    const tmpMp3 = `/tmp/fallback_tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;
-                    try {
-                      execSync(`edge-tts --voice id-ID-ArdiNeural --text ${JSON.stringify(text)} --write-media "${tmpMp3}"`, { stdio: 'ignore' });
-                    } catch (e1) {
-                      try {
-                        execSync(`gtts-cli -l id ${JSON.stringify(text)} --output "${tmpMp3}"`, { stdio: 'ignore' });
-                      } catch (e2) {
-                        execSync(`ffmpeg -y -f lavfi -i anullsrc=r=24000:cl=mono -t 3 -q:a 9 -acodec libmp3lame "${tmpMp3}"`, { stdio: 'ignore' });
-                      }
-                    }
-                    const stream = fs.createReadStream(tmpMp3);
-                    stream.statusCode = 200;
-                    stream.headers = { 'content-type': 'audio/mpeg' };
-                    if (cb) cb(stream);
-                    return;
-                  } catch (err) {}
-                }
-                if (cb) cb(res);
-              });
-            }
-            return origGet.apply(https, arguments);
+          // 2. Katalog Stock Model Suara Neural (Kualitas Studio Rapi Setara ElevenLabs)
+          const VOICE_STOCK_MODELS = {
+            // Multilingual Neural (Sangat natural, mendukung Bahasa Indonesia dengan intonasi manusia luwes)
+            id_andrew_studio:   { voice: 'en-US-AndrewMultilingualNeural',   pitch: '+0Hz', rate: '+4%',  preset: 'studio_warm',  desc: 'Pria Studio Hangat & Rapi (Mirip ElevenLabs Brian/Adam)' },
+            id_ava_studio:      { voice: 'en-US-AvaMultilingualNeural',      pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp', desc: 'Wanita Studio Jernih & Ekspresif (Mirip ElevenLabs Rachel)' },
+            id_brian_narrator:  { voice: 'en-US-BrianMultilingualNeural',    pitch: '-2Hz', rate: '+3%',  preset: 'cinema_deep',  desc: 'Pria Narator Sinematik Berat (Cocok untuk Dokumenter/Mesin)' },
+            id_emma_story:      { voice: 'en-US-EmmaMultilingualNeural',     pitch: '+1Hz', rate: '+2%',  preset: 'studio_crisp', desc: 'Wanita Storytelling Halus (Mirip ElevenLabs Bella)' },
+            id_remy_docu:       { voice: 'fr-FR-RemyMultilingualNeural',     pitch: '-1Hz', rate: '+3%',  preset: 'studio_warm',  desc: 'Pria Intonasi Kalem & Berwibawa' },
+            id_vivienne_soft:   { voice: 'fr-FR-VivienneMultilingualNeural', pitch: '+0Hz', rate: '+0%',  preset: 'studio_crisp', desc: 'Wanita Lembut & Elegan' },
+            id_florian_tech:    { voice: 'de-DE-FlorianMultilingualNeural',  pitch: '-1Hz', rate: '+5%',  preset: 'cinema_deep',  desc: 'Pria Reviewer Teknologi Modern' },
+            id_seraphina_calm:  { voice: 'de-DE-SeraphinaMultilingualNeural',pitch: '+0Hz', rate: '+0%',  preset: 'studio_crisp', desc: 'Wanita Narator Edukasi Tenang' },
+
+            // Native Indonesian Neural (Logat Indonesia Asli)
+            id_ardi_pro:        { voice: 'id-ID-ArdiNeural',                 pitch: '-1Hz', rate: '+5%',  preset: 'studio_warm',  desc: 'Pria Indonesia Profesional & Tegas' },
+            id_ardi_fast:       { voice: 'id-ID-ArdiNeural',                 pitch: '+0Hz', rate: '+14%', preset: 'studio_crisp', desc: 'Pria Indonesia Cepat & Enerjik (Reels/Shorts)' },
+            id_ardi_cinema:     { voice: 'id-ID-ArdiNeural',                 pitch: '-4Hz', rate: '-2%',  preset: 'cinema_deep',  desc: 'Pria Indonesia Bass Dalam Sinematik' },
+            id_gadis_natural:   { voice: 'id-ID-GadisNeural',                pitch: '+0Hz', rate: '+4%',  preset: 'studio_crisp', desc: 'Wanita Indonesia Natural & Ramah' },
+            id_gadis_ceria:     { voice: 'id-ID-GadisNeural',                pitch: '+3Hz', rate: '+10%', preset: 'studio_crisp', desc: 'Wanita Indonesia Ceria & Semangat' },
+            id_gadis_news:      { voice: 'id-ID-GadisNeural',                pitch: '-1Hz', rate: '+6%',  preset: 'studio_warm',  desc: 'Wanita Indonesia Pembaca Berita Formal' },
+
+            // English / Global ElevenLabs Style Presets
+            eleven_adam:        { voice: 'en-US-ChristopherNeural',          pitch: '-3Hz', rate: '+2%',  preset: 'cinema_deep',  desc: 'Deep American Male Narrator (Adam Style)' },
+            eleven_antoni:      { voice: 'en-US-EricNeural',                 pitch: '-1Hz', rate: '+4%',  preset: 'studio_warm',  desc: 'Crisp Well-Rounded Male (Antoni Style)' },
+            eleven_rachel:      { voice: 'en-US-AriaNeural',                 pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp', desc: 'Calm Conversational Female (Rachel Style)' },
+            eleven_bella:       { voice: 'en-US-JennyNeural',                pitch: '+1Hz', rate: '+0%',  preset: 'studio_crisp', desc: 'Soft Storytelling Female (Bella Style)' },
+            eleven_josh:        { voice: 'en-US-GuyNeural',                  pitch: '-2Hz', rate: '+3%',  preset: 'studio_warm',  desc: 'Young Dynamic Male (Josh Style)' },
+            eleven_callum:      { voice: 'en-GB-RyanNeural',                 pitch: '-2Hz', rate: '+2%',  preset: 'cinema_deep',  desc: 'British Documentary Male (Callum Style)' },
+            eleven_charlotte:   { voice: 'en-GB-SoniaNeural',                pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp', desc: 'British Articulate Female (Charlotte Style)' },
+
+            // Preset Karakter Khusus
+            char_ulasan_tekno:  { voice: 'en-US-AndrewMultilingualNeural',   pitch: '-1Hz', rate: '+8%',  preset: 'studio_warm',  desc: 'Gaya Reviewer Gadget/Otomotif' },
+            char_mekanik_ahli:  { voice: 'id-ID-ArdiNeural',                 pitch: '-2Hz', rate: '+4%',  preset: 'cinema_deep',  desc: 'Gaya Instruktur Bengkel / Mekanik' },
+            char_instruktur:    { voice: 'id-ID-GadisNeural',                pitch: '+0Hz', rate: '+5%',  preset: 'studio_warm',  desc: 'Gaya Guru / Presentasi Kelas' },
+            char_dokumenter:    { voice: 'en-US-BrianMultilingualNeural',    pitch: '-3Hz', rate: '+0%',  preset: 'cinema_deep',  desc: 'Gaya Narator National Geographic' }
           };
+
+          // Filter Audio Mastering FFmpeg agar suara terdengar padat, hangat, dan rapi seperti ElevenLabs
+          const AUDIO_MASTERING_FILTERS = {
+            studio_warm:  'highpass=f=75,equalizer=f=180:width_type=o:width=1.2:g=2.5,equalizer=f=3500:width_type=o:width=1.5:g=2.0,acompressor=threshold=-18dB:ratio=3:attack=15:release=150:makeup=2dB,alimiter=limit=0.95',
+            studio_crisp: 'highpass=f=85,equalizer=f=220:width_type=o:width=1.2:g=1.5,equalizer=f=4500:width_type=o:width=1.5:g=3.0,acompressor=threshold=-16dB:ratio=2.8:attack=10:release=120:makeup=2dB,alimiter=limit=0.95',
+            cinema_deep:  'highpass=f=60,equalizer=f=130:width_type=o:width=1.0:g=4.0,equalizer=f=3200:width_type=o:width=1.5:g=2.2,acompressor=threshold=-20dB:ratio=3.5:attack=12:release=180:makeup=3dB,alimiter=limit=0.95'
+          };
+
+          global.VOICE_STOCK_MODELS = VOICE_STOCK_MODELS;
+
+          // Fungsi pembangkit suara kualitas ElevenLabs yang bisa dipanggil langsung dari render.js
+          // atau otomatis menggantikan request TTS standar
+          function synthesizeStudioVoice(text, outputMp3Path, requestedModelKey) {
+            const activeKey = requestedModelKey || process.env.VOICE_MODEL || process.env.DEFAULT_VOICE_MODEL || 'id_andrew_studio';
+            const cfg = VOICE_STOCK_MODELS[activeKey] || VOICE_STOCK_MODELS['id_andrew_studio'];
+            const rawMp3 = `/tmp/raw_tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;
+
+            let success = false;
+
+            // Prioritas 1: Gunakan ElevenLabs API asli jika user menyediakan ELEVENLABS_API_KEY di environment/JS
+            if (process.env.ELEVENLABS_API_KEY) {
+              try {
+                const voiceId = process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB'; // Default Adam
+                const payload = JSON.stringify({
+                  text: text,
+                  model_id: 'eleven_multilingual_v2',
+                  voice_settings: { stability: 0.55, similarity_boost: 0.8 }
+                });
+                execSync(
+                  `curl -s -f -X POST "https://api.elevenlabs.io/v1/text-to-speech/${voiceId}" ` +
+                  `-H "xi-api-key: ${process.env.ELEVENLABS_API_KEY}" ` +
+                  `-H "Content-Type: application/json" ` +
+                  `-d '${payload.replace(/'/g, "'\\''")}' -o "${ outputMp3Path }"`,
+                  { stdio: 'ignore' }
+                );
+                if (fs.existsSync(outputMp3Path) && fs.statSync(outputMp3Path).size > 500) {
+                  return outputMp3Path;
+                }
+              } catch (e) {}
+            }
+
+            // Prioritas 2: Neural Engine (edge-tts) + Studio Audio Mastering (Setara ElevenLabs)
+            const candidates = [
+              cfg,
+              VOICE_STOCK_MODELS['id_ardi_pro'],
+              VOICE_STOCK_MODELS['id_gadis_natural']
+            ];
+
+            for (const cand of candidates) {
+              try {
+                execSync(
+                  `edge-tts --voice "${cand.voice}" --pitch="${cand.pitch}" --rate="${cand.rate}" --text ${JSON.stringify(text)} --write-media "${rawMp3}"`,
+                  { stdio: 'ignore', timeout: 20000 }
+                );
+                if (fs.existsSync(rawMp3) && fs.statSync(rawMp3).size > 200) {
+                  const af = AUDIO_MASTERING_FILTERS[cand.preset] || AUDIO_MASTERING_FILTERS.studio_warm;
+                  execSync(
+                    `ffmpeg -y -i "${rawMp3}" -af "${af}" -ar 44100 -ac 2 -b:a 192k "${outputMp3Path}"`,
+                    { stdio: 'ignore' }
+                  );
+                  fs.unlinkSync(rawMp3);
+                  success = true;
+                  break;
+                }
+              } catch (err) {}
+            }
+
+            // Prioritas 3: Fallback ke gTTS jika edge-tts sedang gangguan jaringan
+            if (!success) {
+              try {
+                execSync(`gtts-cli -l id ${JSON.stringify(text)} --output "${rawMp3}"`, { stdio: 'ignore' });
+                const af = AUDIO_MASTERING_FILTERS.studio_warm;
+                execSync(`ffmpeg -y -i "${rawMp3}" -af "atempo=1.15,${af}" -ar 44100 -ac 2 -b:a 192k "${outputMp3Path}"`, { stdio: 'ignore' });
+                if (fs.existsSync(rawMp3)) fs.unlinkSync(rawMp3);
+                success = true;
+              } catch (e2) {
+                execSync(`ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 3 -q:a 9 -acodec libmp3lame "${outputMp3Path}"`, { stdio: 'ignore' });
+              }
+            }
+
+            return outputMp3Path;
+          }
+
+          global.generateStudioVoice = synthesizeStudioVoice;
+
+          // 3. Hanya aktifkan interceptor TTS jika render.js memang terdeteksi memakai suara (Auto-Detect)
+          if (process.env.NEEDS_VOICE === 'true') {
+            const origGet = https.get;
+            https.get = function(url, options, cb) {
+              if (typeof options === 'function') {
+                cb = options;
+                options = {};
+              }
+              const urlStr = typeof url === 'string' ? url : (url && url.href ? url.href : '');
+
+              // Jika render.js memanggil Google Translate TTS / endpoint TTS standar,
+              // otomatis alihkan ke Stock Model Neural Studio (Setara ElevenLabs) agar suaranya rapi!
+              if (urlStr.includes('translate.google.com/translate_tts') || urlStr.includes('tts://')) {
+                try {
+                  const parsed = new URL(urlStr.replace('tts://', 'https://tts.local/?'));
+                  const text = parsed.searchParams.get('q') || parsed.searchParams.get('text') || 'Narasi video';
+                  const modelParam = parsed.searchParams.get('model') || parsed.searchParams.get('voice') || process.env.DEFAULT_VOICE_MODEL;
+                  const tmpMp3 = `/tmp/studio_tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;
+
+                  synthesizeStudioVoice(text, tmpMp3, modelParam);
+
+                  const stream = fs.createReadStream(tmpMp3);
+                  stream.statusCode = 200;
+                  stream.headers = { 'content-type': 'audio/mpeg' };
+                  stream.on('close', () => {
+                    try { fs.unlinkSync(tmpMp3); } catch (e) {}
+                  });
+                  if (cb) process.nextTick(() => cb(stream));
+                  return { on: () => ({ on: () => {} }), end: () => {} };
+                } catch (err) {}
+              }
+              return origGet.apply(https, arguments);
+            };
+          }
           PRELOAD_EOF
 
+          # Jika render.js menggunakan atempo=1.18 untuk mempercepat suara robot Google TTS lama,
+          # normalkan menjadi atempo=1.00 karena suara Neural Studio sudah memiliki tempo natural & rapi
+          if [ "$NEEDS_VOICE" == "true" ] && [ -f "render.js" ]; then
+            sed -i 's/atempo=1.18/atempo=1.02/g' render.js || true
+          fi
+
       - name: Run JS Motion Graphic Render
+        env:
+          NEEDS_VOICE: ${{ steps.detect-voice.outputs.needs_voice }}
+          DEFAULT_VOICE_MODEL: ${{ steps.detect-voice.outputs.selected_model }}
         run: |
           xvfb-run -a --server-args="-screen 0 1920x1080x24" node --require ./preload_fix.js render.js
 

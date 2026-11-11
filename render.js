@@ -1,1386 +1,1850 @@
-```javascript
-/**
- * render.js - Animasi Edukasi Cara Kerja Mesin Mobil 4-Tak & Komponen Utama
- * Format: Portrait 9:16 (1080x1920) | Durasi: 40.0 Detik | 30 FPS
- * Library: @napi-rs/canvas + ffmpeg CLI + global.generateStudioVoice
- */
+const VOICE_MODEL = "id_brian_narrator";
 
-const { createCanvas } = require('@napi-rs/canvas');
-const { spawn, execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
+const { spawn, execSync } = require("child_process");
+const { createCanvas } = require("@napi-rs/canvas");
 
 // ============================================================================
-// 1. KONFIGURASI SUARA & VIDEO
+// KONFIGURASI UTAMA VIDEO (9:16 PORTRAIT - 1 MENIT 30 DETIK)
 // ============================================================================
-const VOICE_MODEL = 'char_mekanik_ahli';
-
-// Resolusi 9:16 (Vertical Reels / Shorts / TikTok)
 const WIDTH = 1080;
 const HEIGHT = 1920;
 const FPS = 30;
-const DURATION = 40; // Total tepat 40 detik
-const TOTAL_FRAMES = FPS * DURATION;
+const TOTAL_DURATION = 90; // Tepat 1 menit 30 detik
+const TOTAL_FRAMES = TOTAL_DURATION * FPS;
+const OUTPUT_FILE = path.resolve("./output.mp4");
+const TEMP_DIR = path.resolve("./temp_ghost_science");
+
+if (!fs.existsSync(TEMP_DIR)) {
+  fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
 
 // ============================================================================
-// 2. SEGMEN NARASI & TIMELINE (ANTI-TABRAKAN AUDIO, FULL 40 DETIK)
+// SKENARIO 7 ADEGAN ILMIAH (TOTAL = 90.0 DETIK)
 // ============================================================================
-// Setiap segmen memiliki jendela waktu longgar dan kecepatan kata yang terukur
-// (~2.3 kata/detik) agar suara selesai sebelum segmen berikutnya dimulai.
-const SEGMENTS = [
+const SCENES = [
   {
     id: 0,
-    start: 0.0,
-    end: 5.5,
-    phase: 'intro',
-    badge: 'OVERVIEW MESIN',
-    title: 'JANTUNG PACU MOBIL',
-    subtitle: 'Mengubah Ledakan BBM Menjadi Gerak Roda',
-    highlight: 'all',
-    narration: 'Pernah penasaran bagaimana mesin mobil mengubah bensin menjadi tenaga luar biasa? Mari kita bedah cara kerjanya secara bertahap.'
+    start: 0,
+    end: 12,
+    tag: "FENOMENA PARANORMAL VS SAINS",
+    title: "Mengapa Kita Melihat Hantu?",
+    subtitle: "Ilusi Biologis & Fisika di Balik Penampakan",
+    accent: "#00f2fe",
+    secondary: "#7f5af0",
+    narration:
+      "Pernahkah kamu merasa diawasi di ruangan kosong, atau melihat bayangan putih melintas di sudut mata? Secara ilmiah, hantu bukanlah arwah gentayangan, melainkan fenomena biologis dan fisika yang menipu otak kita."
   },
   {
     id: 1,
-    start: 5.5,
-    end: 12.5,
-    phase: 'components',
-    badge: 'KOMPONEN UTAMA',
-    title: '5 KOMPONEN INTI',
-    subtitle: 'Silinder • Piston • Stang • Kruk As • Katup & Busi',
-    highlight: 'components',
-    narration: 'Di dalam blok silinder, ada piston yang bergerak naik turun, stang piston sebagai penghubung, kruk as pemutar roda, serta katup dan busi.'
+    start: 12,
+    end: 25,
+    tag: "FAKTOR ILMIAH #1",
+    title: "Pareidolia Visual",
+    subtitle: "Saat Otak Salah Menebak Bayangan di Tempat Gelap",
+    accent: "#ff8906",
+    secondary: "#f25f4c",
+    narration:
+      "Pertama adalah Pareidolia. Sejak zaman purba, otak manusia berevolusi agar sangat peka mengenali wajah dan siluet tubuh demi bertahan hidup. Di tempat gelap, otak otomatis menyusun lipatan tirai atau gantungan baju menjadi sosok menyeramkan."
   },
   {
     id: 2,
-    start: 12.5,
-    end: 19.0,
-    phase: 'intake',
-    badge: 'LANGKAH 1 • INTAKE',
-    title: 'LANGKAH HISAP',
-    subtitle: 'Katup Masuk Terbuka • Campuran Udara & BBM Masuk',
-    highlight: 'intake_valve',
-    narration: 'Langkah pertama, hisap. Katup masuk terbuka dan piston bergerak turun, menyedot kabut campuran udara serta bahan bakar ke ruang bakar.'
+    start: 25,
+    end: 40,
+    tag: "FAKTOR ILMIAH #2",
+    title: "Sleep Paralysis (Ketindihan)",
+    subtitle: "Otak Terbangun, Namun Saraf Motorik Masih Terkunci",
+    accent: "#e53170",
+    secondary: "#7f5af0",
+    narration:
+      "Kedua, fenomena ketindihan atau Sleep Paralysis. Saat terbangun mendadak dari fase tidur REM, kesadaranmu sudah aktif, tetapi saraf motorik tubuh masih dikunci. Kepanikan memicu amigdala memproyeksikan halusinasi sosok hitam yang menekan dada."
   },
   {
     id: 3,
-    start: 19.0,
-    end: 25.5,
-    phase: 'compression',
-    badge: 'LANGKAH 2 • COMPRESSION',
-    title: 'LANGKAH KOMPRESI',
-    subtitle: 'Kedua Katup Tertutup • Tekanan & Suhu Naik Drastis',
-    highlight: 'piston',
-    narration: 'Langkah kedua, kompresi. Kedua katup menutup rapat lalu piston bergerak naik, memadatkan campuran tadi hingga bertekanan dan bersuhu sangat tinggi.'
+    start: 40,
+    end: 54,
+    tag: "FAKTOR ILMIAH #3",
+    title: "Gelombang Infrasonik 18.9 Hz",
+    subtitle: "Frekuensi Suara Tak Terdengar yang Menggetarkan Bola Mata",
+    accent: "#00ebc7",
+    secondary: "#00b4d8",
+    narration:
+      "Ketiga, gelombang suara Infrasonik di frekuensi delapan belas koma sembilan Hertz. Getaran dari angin atau pipa tua ini terlalu rendah untuk didengar telinga, namun beresonansi dengan bola mata manusia dan memunculkan bayangan putih semu."
   },
   {
     id: 4,
-    start: 25.5,
-    end: 32.5,
-    phase: 'power',
-    badge: 'LANGKAH 3 • POWER',
-    title: 'LANGKAH USAHA',
-    subtitle: 'Busi Memercik Api • Ledakan Mendorong Piston Turun',
-    highlight: 'spark_plug',
-    narration: 'Langkah ketiga, usaha. Busi memercikkan bunga api yang memicu ledakan dahsyat, menghempaskan piston ke bawah untuk memutar kruk as dengan kuat.'
+    start: 54,
+    end: 68,
+    tag: "FAKTOR ILMIAH #4",
+    title: "Gas Karbon Monoksida (CO)",
+    subtitle: "Kebocoran Gas Tak Berbau Pemicu Halusinasi Rumah Hantu",
+    accent: "#2cb67d",
+    secondary: "#ff5470",
+    narration:
+      "Keempat, keracunan gas Karbon Monoksida. Banyak kasus rumah berhantu ternyata dipicu kebocoran gas tak berbau ini. Karbon monoksida menghambat suplai oksigen ke otak, memicu rasa dingin mendadak, ketakutan ekstrem, serta halusinasi bisikan."
   },
   {
     id: 5,
-    start: 32.5,
-    end: 40.0,
-    phase: 'exhaust',
-    badge: 'LANGKAH 4 • EXHAUST',
-    title: 'LANGKAH BUANG & TORSI',
-    subtitle: 'Katup Buang Terbuka • Siklus Ribuan RPM Menggerakkan Mobil',
-    highlight: 'exhaust_valve',
-    narration: 'Terakhir, langkah buang. Katup buang terbuka dan piston naik mendorong sisa asap keluar. Siklus ini berulang ribuan kali per menit untuk melajukan mobil!'
+    start: 68,
+    end: 80,
+    tag: "FAKTOR ILMIAH #5",
+    title: "Medan Elektromagnetik (EMF)",
+    subtitle: "Stimulasi Lobus Temporal & Sensasi Diawasi dari Belakang",
+    accent: "#9b5de5",
+    secondary: "#00bbf9",
+    narration:
+      "Kelima, paparan medan elektromagnetik kuat dari kabel listrik tua. Gelombang ini mengganggu sinyal listrik alami di lobus temporal otak, memicu sensasi merinding dan perasaan kuat seolah ada sosok berdiri tepat di belakangmu."
+  },
+  {
+    id: 6,
+    start: 80,
+    end: 90,
+    tag: "KESIMPULAN SAINS",
+    title: "Cahaya Logika Mengusir Takut",
+    subtitle: "Hantu Adalah Proyeksi Otak yang Memproses Anomali",
+    accent: "#ffd166",
+    secondary: "#06d6a0",
+    narration:
+      "Jadi, hantu sebenarnya adalah karya seni dari otak manusia yang sedang memproses ketakutan, kelelahan, dan anomali lingkungan. Saat kita memahami sains di baliknya, rasa takut pun berubah menjadi rasa ingin tahu."
   }
 ];
 
 // ============================================================================
-// 3. SISTEM PARTIKEL & VFX ENGINE
+// UTILITAS MATEMATIKA & PENGGAMBARAN KANVAS
 // ============================================================================
-const bgParticles = Array.from({ length: 45 }, (_, i) => ({
-  x: (Math.sin(i * 78.233) * 0.5 + 0.5) * WIDTH,
-  y: (Math.cos(i * 45.164) * 0.5 + 0.5) * HEIGHT,
-  r: 1.5 + (i % 4) * 1.2,
-  speedY: -15 - (i % 5) * 8,
-  alpha: 0.15 + (i % 4) * 0.08,
-  hue: i % 2 === 0 ? '#00f2fe' : '#ff9a00'
-}));
+const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+const lerp = (a, b, t) => a + (b - a) * clamp(t, 0, 1);
+const easeOutCubic = (t) => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
+const easeInOutSine = (t) => -(Math.cos(Math.PI * clamp(t, 0, 1)) - 1) / 2;
 
-const chamberParticles = Array.from({ length: 65 }, (_, i) => ({
-  seedX: (Math.sin(i * 12.9898) * 43758.5453) % 1,
-  seedY: (Math.cos(i * 78.233) * 23421.631) % 1,
-  size: 4 + (i % 5) * 2.5,
-  speed: 0.6 + (i % 7) * 0.15,
-  offset: i * 0.37
-}));
-
-// Helper Matematika & Easing
-function clamp(val, min, max) {
-  return Math.max(min, Math.min(max, val));
+function hexToRgba(hex, alpha = 1) {
+  const clean = hex.replace("#", "");
+  const num = parseInt(clean, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
 }
 
-function lerp(a, b, t) {
-  return a + (b - a) * clamp(t, 0, 1);
-}
-
-function easeInOutCubic(t) {
-  const x = clamp(t, 0, 1);
-  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
-}
-
-function easeOutBack(t) {
-  const x = clamp(t, 0, 1);
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
-}
-
-// Helper Menggambar Rounded Rectangle
 function drawRoundedRect(ctx, x, y, w, h, r) {
   const radius = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + w - radius, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-  ctx.lineTo(x + w, y + h - radius);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-  ctx.lineTo(x + radius, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
   ctx.closePath();
 }
 
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(" ");
+  const lines = [];
+  let current = "";
+  for (let i = 0; i < words.length; i++) {
+    const testLine = current ? `${current} ${words[i]}` : words[i];
+    if (ctx.measureText(testLine).width > maxWidth && current) {
+      lines.push(current);
+      current = words[i];
+    } else {
+      current = testLine;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+// Partikel atmosferik global (debu malam / spora / kabut)
+const PARTICLES = Array.from({ length: 55 }, (_, i) => ({
+  x: (i * 197.3) % WIDTH,
+  y: (i * 311.7) % HEIGHT,
+  r: 1.5 + (i % 5) * 1.1,
+  speedY: -12 - (i % 7) * 5,
+  speedX: ((i % 9) - 4) * 4,
+  phase: i * 0.7
+}));
+
 // ============================================================================
-// 4. GENERATOR AUDIO TTS PRESISI & ANTI-OVERLAP
+// KOMPONEN KARAKTER & OBJEK ILUSTRASI (HANTU, MANUSIA, OTAK, MATA, DLL)
+// ============================================================================
+
+/**
+ * Menggambar sosok Hantu Ilmiah/Klasik dengan kain bergelombang sinusoidal,
+ * efek pendar ektoplasma, tangan melayang, dan mata bercahaya.
+ */
+function drawGhostEntity(ctx, x, y, scale, t, alpha = 0.85, color = "#00f2fe", dissolve = 0) {
+  ctx.save();
+  ctx.translate(x, y + Math.sin(t * 2.6) * 18);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = clamp(alpha * (1 - dissolve), 0, 1);
+
+  // Aura luar hantu
+  const aura = ctx.createRadialGradient(0, -20, 10, 0, 0, 220);
+  aura.addColorStop(0, hexToRgba(color, 0.45));
+  aura.addColorStop(0.5, hexToRgba(color, 0.15));
+  aura.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = aura;
+  ctx.beginPath();
+  ctx.arc(0, 0, 220, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tubuh kain hantu dengan gelombang sinusoidal di bagian bawah
+  const bodyGrad = ctx.createLinearGradient(0, -150, 0, 170);
+  bodyGrad.addColorStop(0, "rgba(235, 252, 255, 0.92)");
+  bodyGrad.addColorStop(0.55, hexToRgba(color, 0.55));
+  bodyGrad.addColorStop(1, "rgba(10, 25, 45, 0.0)");
+
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.arc(0, -65, 78, Math.PI, 0, false);
+
+  // Sisi kanan ke bawah
+  const rightWave = Math.sin(t * 3.2) * 14;
+  ctx.bezierCurveTo(85, 10, 102 + rightWave, 95, 92 + rightWave, 155);
+
+  // Gelombang kain bawah (5 lipatan)
+  const folds = 5;
+  const startX = 92 + rightWave;
+  const endX = -92 + Math.cos(t * 3.0) * 14;
+  const totalW = startX - endX;
+  for (let i = 1; i <= folds; i++) {
+    const px = startX - (totalW * i) / folds;
+    const prevX = startX - (totalW * (i - 0.5)) / folds;
+    const waveY = 155 + Math.sin(t * 5 + i * 1.4) * 22 + (i % 2 === 0 ? -18 : 14);
+    ctx.quadraticCurveTo(prevX, waveY, px, 148 + Math.cos(t * 4 + i) * 12);
+  }
+
+  // Sisi kiri kembali ke kepala
+  ctx.bezierCurveTo(-102, 90, -85, 10, -78, -65);
+  ctx.closePath();
+  ctx.fill();
+
+  // Garis tepi bercahaya halus
+  ctx.strokeStyle = hexToRgba(color, 0.7);
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Lipatan kain internal
+  ctx.strokeStyle = hexToRgba(color, 0.3);
+  ctx.lineWidth = 2;
+  for (let k = -1; k <= 1; k++) {
+    ctx.beginPath();
+    ctx.moveTo(k * 32, -10);
+    ctx.quadraticCurveTo(k * 45 + Math.sin(t * 3 + k) * 10, 70, k * 38, 135);
+    ctx.stroke();
+  }
+
+  // Tangan melayang kiri & kanan
+  [-1, 1].forEach((dir) => {
+    ctx.save();
+    const armX = dir * 92;
+    const armY = -15 + Math.sin(t * 3.5 + dir) * 12;
+    ctx.translate(armX, armY);
+    ctx.rotate(dir * (0.35 + Math.sin(t * 2.5) * 0.12));
+    ctx.fillStyle = hexToRgba(color, 0.45);
+    ctx.beginPath();
+    ctx.ellipse(dir * 22, 0, 34, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // Mata & Mulut Hantu
+  ctx.fillStyle = "#060b16";
+  // Mata kiri & kanan
+  ctx.beginPath();
+  ctx.ellipse(-26, -68, 13, 18, -0.1, 0, Math.PI * 2);
+  ctx.ellipse(26, -68, 13, 18, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Inti mata menyala
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 15;
+  ctx.beginPath();
+  ctx.arc(-26 + Math.sin(t * 2) * 3, -68, 5, 0, Math.PI * 2);
+  ctx.arc(26 + Math.sin(t * 2) * 3, -68, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Mulut melolong lembut
+  ctx.fillStyle = "#060b16";
+  ctx.beginPath();
+  ctx.ellipse(0, -32, 11, 16 + Math.sin(t * 4) * 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Partikel ektoplasma menguap
+  for (let p = 0; p < 8; p++) {
+    const py = 140 - ((t * 60 + p * 28) % 240);
+    const px = Math.sin(t * 2 + p * 1.7) * 75;
+    const pr = 3 + (p % 4) * 2;
+    ctx.fillStyle = hexToRgba(color, clamp((py + 100) / 240, 0.1, 0.7));
+    ctx.beginPath();
+    ctx.arc(px, py, pr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Menggambar Karakter Manusia lengkap dengan ekspresi wajah (takut, panik, tenang),
+ * gerak napas dada, kedipan mata, keringat dingin, dan senter opsional.
+ */
+function drawHumanCharacter(ctx, x, y, scale, t, options = {}) {
+  const {
+    mood = "scared", // "scared" | "dizzy" | "calm"
+    hasFlashlight = false,
+    flashlightAngle = -0.25,
+    lookDir = 1,
+    shirtColor = "#2563eb"
+  } = options;
+
+  const shiverX = mood === "scared" ? Math.sin(t * 38) * 2.2 : 0;
+  const breathY = Math.sin(t * 2.8) * 3.5;
+
+  ctx.save();
+  ctx.translate(x + shiverX, y);
+  ctx.scale(scale, scale);
+
+  // Bayangan lantai di bawah kaki
+  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+  ctx.beginPath();
+  ctx.ellipse(0, 210, 75, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Kaki
+  ctx.lineWidth = 22;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#1e293b";
+  ctx.beginPath();
+  ctx.moveTo(-26, 95);
+  ctx.lineTo(-30, 200);
+  ctx.moveTo(26, 95);
+  ctx.lineTo(30, 200);
+  ctx.stroke();
+
+  // Sepatu
+  ctx.fillStyle = "#0f172a";
+  drawRoundedRect(ctx, -48, 192, 38, 18, 8);
+  ctx.fill();
+  drawRoundedRect(ctx, 14, 192, 38, 18, 8);
+  ctx.fill();
+
+  // Torso / Jaket Manusia
+  ctx.save();
+  ctx.translate(0, breathY);
+  const torsoGrad = ctx.createLinearGradient(0, -35, 0, 105);
+  torsoGrad.addColorStop(0, shirtColor);
+  torsoGrad.addColorStop(1, "#0f172a");
+  ctx.fillStyle = torsoGrad;
+  drawRoundedRect(ctx, -56, -32, 112, 135, 34);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Kerah leher
+  ctx.fillStyle = "#e2bb99";
+  drawRoundedRect(ctx, -16, -54, 32, 30, 10);
+  ctx.fill();
+
+  // Kepala
+  ctx.fillStyle = "#f3cfb3";
+  ctx.beginPath();
+  ctx.arc(0, -96, 52, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Rambut
+  ctx.fillStyle = "#0f172a";
+  ctx.beginPath();
+  ctx.arc(0, -106, 55, Math.PI * 0.92, Math.PI * 2.08);
+  ctx.quadraticCurveTo(45, -145, 15, -135);
+  ctx.quadraticCurveTo(-25, -150, -52, -106);
+  ctx.fill();
+
+  // Mata
+  const blink = Math.sin(t * 1.7) > 0.97 ? 0.15 : 1;
+  const eyeOffsetX = lookDir * 5;
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.ellipse(-18, -96, 12, 14 * blink, 0, 0, Math.PI * 2);
+  ctx.ellipse(18, -96, 12, 14 * blink, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pupil
+  const pupilR = mood === "scared" ? 4.5 : 6;
+  ctx.fillStyle = "#0f172a";
+  ctx.beginPath();
+  ctx.arc(-18 + eyeOffsetX, -96, pupilR, 0, Math.PI * 2);
+  ctx.arc(18 + eyeOffsetX, -96, pupilR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Alis
+  ctx.strokeStyle = "#0f172a";
+  ctx.lineWidth = 4.5;
+  ctx.beginPath();
+  if (mood === "scared" || mood === "dizzy") {
+    ctx.moveTo(-32, -114);
+    ctx.lineTo(-8, -120);
+    ctx.moveTo(8, -120);
+    ctx.lineTo(32, -114);
+  } else {
+    ctx.moveTo(-30, -116);
+    ctx.lineTo(-8, -116);
+    ctx.moveTo(8, -116);
+    ctx.lineTo(30, -116);
+  }
+  ctx.stroke();
+
+  // Mulut
+  ctx.beginPath();
+  if (mood === "scared") {
+    ctx.fillStyle = "#7f1d1d";
+    ctx.ellipse(0, -68, 12, 8 + Math.sin(t * 8) * 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (mood === "dizzy") {
+    ctx.strokeStyle = "#7f1d1d";
+    ctx.lineWidth = 4;
+    ctx.moveTo(-14, -68);
+    ctx.quadraticCurveTo(-5, -74, 0, -68);
+    ctx.quadraticCurveTo(5, -62, 14, -68);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineWidth = 4.5;
+    ctx.arc(0, -74, 14, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
+  }
+
+  // Tetes keringat dingin jika takut/pusing
+  if (mood === "scared" || mood === "dizzy") {
+    const sweatY = -115 + ((t * 35) % 28);
+    ctx.fillStyle = "#38bdf8";
+    ctx.beginPath();
+    ctx.arc(-40, sweatY, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Lengan Kiri
+  ctx.strokeStyle = shirtColor;
+  ctx.lineWidth = 20;
+  ctx.beginPath();
+  if (mood === "dizzy") {
+    // Memegang kepala karena pusing CO
+    ctx.moveTo(-48, -12);
+    ctx.quadraticCurveTo(-85, -65, -45, -115);
+  } else {
+    ctx.moveTo(-48, -12);
+    ctx.quadraticCurveTo(-70, 35, -45, 70);
+  }
+  ctx.stroke();
+
+  // Lengan Kanan & Senter
+  ctx.save();
+  ctx.translate(46, -10);
+  const armRot = hasFlashlight ? flashlightAngle + Math.sin(t * 3) * 0.06 : 0.4;
+  ctx.rotate(armRot);
+  ctx.strokeStyle = shirtColor;
+  ctx.lineWidth = 20;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(68, 10);
+  ctx.stroke();
+
+  // Tangan kanan
+  ctx.fillStyle = "#f3cfb3";
+  ctx.beginPath();
+  ctx.arc(72, 10, 11, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (hasFlashlight) {
+    // Bodi senter
+    ctx.fillStyle = "#334155";
+    drawRoundedRect(ctx, 68, -2, 42, 22, 5);
+    ctx.fill();
+    ctx.fillStyle = "#facc15";
+    ctx.fillRect(106, -4, 8, 26);
+
+    // Sorot cahaya senter (beam kerucut)
+    const beamGrad = ctx.createLinearGradient(114, 10, 560, 10);
+    beamGrad.addColorStop(0, "rgba(254, 240, 138, 0.55)");
+    beamGrad.addColorStop(0.5, "rgba(254, 240, 138, 0.18)");
+    beamGrad.addColorStop(1, "rgba(254, 240, 138, 0)");
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(114, 0);
+    ctx.lineTo(580, -165);
+    ctx.lineTo(580, 185);
+    ctx.lineTo(114, 20);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.restore(); // end torso breath
+  ctx.restore();
+}
+
+/**
+ * Menggambar Ilustrasi Anatomi Otak Manusia dengan area spesifik yang menyala
+ * (misal: Amigdala, Lobus Temporal, atau Korteks Visual).
+ */
+function drawBrainIllustration(ctx, x, y, scale, t, highlightZone = "amygdala", accentColor = "#e53170") {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+
+  // Glow latar belakang otak
+  const bgGlow = ctx.createRadialGradient(0, 0, 20, 0, 0, 165);
+  bgGlow.addColorStop(0, hexToRgba(accentColor, 0.35));
+  bgGlow.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = bgGlow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 165, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Kontur utama serebrum (otak besar)
+  ctx.fillStyle = "#1e293b";
+  ctx.strokeStyle = "#94a3b8";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-95, 25);
+  ctx.bezierCurveTo(-125, -35, -85, -105, -15, -110);
+  ctx.bezierCurveTo(55, -115, 115, -70, 115, -5);
+  ctx.bezierCurveTo(118, 45, 80, 75, 35, 70);
+  ctx.bezierCurveTo(0, 82, -55, 75, -95, 25);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Serebelum (otak kecil) & Batang Otak
+  ctx.fillStyle = "#334155";
+  ctx.beginPath();
+  ctx.ellipse(58, 72, 36, 24, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#475569";
+  drawRoundedRect(ctx, 8, 65, 26, 62, 10);
+  ctx.fill();
+
+  // Lekukan Gyri / Sulci otak
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
+  ctx.lineWidth = 3;
+  const sulci = [
+    [-70, -20, -25, -45, 10, -20],
+    [-45, -75, 0, -60, 45, -70],
+    [-60, 15, -10, 5, 40, 25],
+    [15, -50, 55, -20, 85, -30]
+  ];
+  sulci.forEach((c) => {
+    ctx.beginPath();
+    ctx.moveTo(c[0], c[1]);
+    ctx.quadraticCurveTo(c[2], c[3], c[4], c[5]);
+    ctx.stroke();
+  });
+
+  // Area Spesifik yang Menyala (Amigdala / Lobus Temporal / Hipoksia)
+  const pulse = 0.65 + 0.35 * Math.sin(t * 6);
+  let zx = 0;
+  let zy = 10;
+  let zr = 28;
+  let label = "AMIGDALA AKTIF";
+
+  if (highlightZone === "temporal") {
+    zx = -10;
+    zy = 32;
+    zr = 46;
+    label = "LOBUS TEMPORAL";
+  } else if (highlightZone === "visual") {
+    zx = 75;
+    zy = -10;
+    zr = 38;
+    label = "KORTEKS VISUAL";
+  } else if (highlightZone === "hypoxia") {
+    zx = 0;
+    zy = -25;
+    zr = 75;
+    label = "HIPOKSIA (O2 TURUN)";
+  }
+
+  const zoneGrad = ctx.createRadialGradient(zx, zy, 4, zx, zy, zr * 1.4);
+  zoneGrad.addColorStop(0, hexToRgba(accentColor, 0.95 * pulse));
+  zoneGrad.addColorStop(0.6, hexToRgba(accentColor, 0.45 * pulse));
+  zoneGrad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = zoneGrad;
+  ctx.beginPath();
+  ctx.arc(zx, zy, zr * 1.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Sinyal impuls saraf berjalan di dalam otak
+  for (let i = 0; i < 6; i++) {
+    const ang = (t * 2.2 + i * 1.05) % (Math.PI * 2);
+    const nx = zx + Math.cos(ang) * (zr * 0.8);
+    const ny = zy + Math.sin(ang) * (zr * 0.6);
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(nx, ny, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Label penunjuk ilmiah
+  ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 2;
+  drawRoundedRect(ctx, -110, -162, 220, 38, 12);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 18px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(label, 0, -137);
+
+  ctx.restore();
+}
+
+// ============================================================================
+// RENDERER LATAR CERITA & ANIMASI SPESIFIK TIAP ADEGAN (1 - 7)
+// ============================================================================
+
+/**
+ * ADEGAN 1: Lorong Rumah Tua Malam Hari, Jendela Bulan Purnama, Manusia & Hantu
+ */
+function renderScene0(ctx, t, sceneProgress) {
+  // Latar koridor rumah tua gelap
+  const wallGrad = ctx.createLinearGradient(0, 260, 0, 1450);
+  wallGrad.addColorStop(0, "#070b19");
+  wallGrad.addColorStop(0.7, "#0f172a");
+  wallGrad.addColorStop(1, "#1e1b2e");
+  ctx.fillStyle = wallGrad;
+  ctx.fillRect(0, 260, WIDTH, 1190);
+
+  // Perspektif lantai kayu lorong
+  ctx.fillStyle = "#121324";
+  ctx.beginPath();
+  ctx.moveTo(0, 1450);
+  ctx.lineTo(WIDTH, 1450);
+  ctx.lineTo(840, 1080);
+  ctx.lineTo(240, 1080);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.12)";
+  ctx.lineWidth = 2;
+  for (let i = -3; i <= 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(540 + i * 95, 1080);
+    ctx.lineTo(540 + i * 240, 1450);
+    ctx.stroke();
+  }
+
+  // Jendela besar di tengah lorong + Bulan Purnama
+  const winX = 390;
+  const winY = 470;
+  const winW = 300;
+  const winH = 440;
+  const skyGrad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
+  skyGrad.addColorStop(0, "#0b1536");
+  skyGrad.addColorStop(1, "#1d3557");
+  ctx.fillStyle = skyGrad;
+  drawRoundedRect(ctx, winX, winY, winW, winH, 16);
+  ctx.fill();
+
+  // Bulan bersinar
+  ctx.fillStyle = "rgba(224, 242, 254, 0.9)";
+  ctx.shadowColor = "#38bdf8";
+  ctx.shadowBlur = 40;
+  ctx.beginPath();
+  ctx.arc(winX + 200, winY + 110, 46, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Rintik hujan di balik jendela
+  ctx.strokeStyle = "rgba(186, 230, 253, 0.35)";
+  ctx.lineWidth = 2;
+  for (let r = 0; r < 18; r++) {
+    const rx = winX + 20 + ((r * 53) % (winW - 40));
+    const ry = winY + 20 + ((t * 420 + r * 70) % (winH - 50));
+    ctx.beginPath();
+    ctx.moveTo(rx, ry);
+    ctx.lineTo(rx - 6, ry + 26);
+    ctx.stroke();
+  }
+
+  // Kusen jendela
+  ctx.strokeStyle = "#1e293b";
+  ctx.lineWidth = 12;
+  drawRoundedRect(ctx, winX, winY, winW, winH, 16);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(winX + winW / 2, winY);
+  ctx.lineTo(winX + winW / 2, winY + winH);
+  ctx.moveTo(winX, winY + winH / 2);
+  ctx.lineTo(winX + winW, winY + winH / 2);
+  ctx.stroke();
+
+  // Lampu gantung tua berayun di atas
+  ctx.save();
+  ctx.translate(540, 290);
+  ctx.rotate(Math.sin(t * 2.1) * 0.14);
+  ctx.strokeStyle = "#475569";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, 95);
+  ctx.stroke();
+  ctx.fillStyle = "#334155";
+  ctx.beginPath();
+  ctx.arc(0, 105, 22, Math.PI, 0);
+  ctx.fill();
+  const flicker = Math.sin(t * 19) > 0.7 ? 0.25 : 0.85;
+  ctx.fillStyle = `rgba(253, 224, 71, ${flicker})`;
+  ctx.beginPath();
+  ctx.arc(0, 110, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Karakter Manusia di kiri bawah memegang senter
+  drawHumanCharacter(ctx, 255, 1110, 1.15, t, {
+    mood: "scared",
+    hasFlashlight: true,
+    flashlightAngle: -0.35 + Math.sin(t * 1.8) * 0.12,
+    lookDir: 1,
+    shirtColor: "#1d4ed8"
+  });
+
+  // Sosok Hantu melayang di kanan atas lorong
+  const ghostX = 785 + Math.cos(t * 1.5) * 35;
+  const ghostY = 820;
+  drawGhostEntity(ctx, ghostX, ghostY, 1.18, t, 0.85, "#00f2fe", 0);
+
+  // Indikator deteksi visual antara manusia & hantu
+  ctx.save();
+  ctx.setLineDash([10, 10]);
+  ctx.strokeStyle = "rgba(0, 242, 254, 0.5)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(310, 990);
+  ctx.lineTo(ghostX - 40, ghostY - 50);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * ADEGAN 2: Pareidolia — Gantungan Jas & Tirai yang Tampak Seperti Monster di Gelap,
+ * Lalu Terungkap Saat Disorot Senter + Diagram Deteksi Wajah Otak
+ */
+function renderScene1(ctx, t, sceneProgress) {
+  // Siklus cahaya senter: 0 = gelap (tampak monster), 1 = terang (tampak gantungan baju)
+  const revealFactor = clamp(0.5 + 0.5 * Math.sin(t * 1.6 - 0.8), 0, 1);
+
+  // Background sudut kamar
+  ctx.fillStyle = "#080c1a";
+  ctx.fillRect(0, 260, WIDTH, 1190);
+
+  // Tirai jendela di sisi kanan
+  ctx.fillStyle = "#162038";
+  for (let i = 0; i < 5; i++) {
+    const wave = Math.sin(t * 2 + i) * 12;
+    ctx.beginPath();
+    ctx.moveTo(640 + i * 70, 340);
+    ctx.quadraticCurveTo(655 + i * 70 + wave, 720, 635 + i * 70 + wave, 1150);
+    ctx.lineTo(685 + i * 70 + wave, 1150);
+    ctx.quadraticCurveTo(695 + i * 70 + wave, 720, 680 + i * 70, 340);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // OBJEK PAREIDOLIA DI KANAN (X: 760, Y: 920)
+  const objX = 760;
+  const objY = 930;
+
+  // 1) Saat Terang (Realita): Tiang Gantungan Kayu, Topi Fedora, & Jas Panjang
+  ctx.save();
+  ctx.globalAlpha = 0.25 + 0.75 * revealFactor;
+
+  // Tiang kayu
+  ctx.strokeStyle = "#92400e";
+  ctx.lineWidth = 16;
+  ctx.beginPath();
+  ctx.moveTo(objX, objY - 260);
+  ctx.lineTo(objX, objY + 260);
+  ctx.moveTo(objX - 80, objY + 260);
+  ctx.lineTo(objX + 80, objY + 260);
+  ctx.stroke();
+
+  // Jas tergantung
+  ctx.fillStyle = "#475569";
+  ctx.beginPath();
+  ctx.moveTo(objX - 65, objY - 140);
+  ctx.lineTo(objX + 65, objY - 140);
+  ctx.lineTo(objX + 95, objY + 120);
+  ctx.lineTo(objX - 95, objY + 120);
+  ctx.closePath();
+  ctx.fill();
+
+  // Topi di atas gantungan
+  ctx.fillStyle = "#78350f";
+  ctx.beginPath();
+  ctx.ellipse(objX, objY - 220, 75, 18, -0.08, 0, Math.PI * 2);
+  ctx.fill();
+  drawRoundedRect(ctx, objX - 45, objY - 275, 90, 58, 20);
+  ctx.fill();
+
+  // Dua kancing jaket yang memantulkan cahaya (sering dikira mata hantu)
+  ctx.fillStyle = "#fde047";
+  ctx.beginPath();
+  ctx.arc(objX - 22, objY - 205, 8, 0, Math.PI * 2);
+  ctx.arc(objX + 22, objY - 205, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 2) Saat Gelap (Ilusi Pareidolia): Siluet Hantu Bertanduk/Bertopi dengan Mata Merah
+  ctx.save();
+  ctx.globalAlpha = 1 - revealFactor * 0.88;
+  ctx.fillStyle = "#04060d";
+  ctx.beginPath();
+  ctx.arc(objX, objY - 210, 62, 0, Math.PI * 2);
+  ctx.moveTo(objX - 90, objY - 140);
+  ctx.quadraticCurveTo(objX - 135, objY, objX - 110, objY + 210);
+  ctx.lineTo(objX + 110, objY + 210);
+  ctx.quadraticCurveTo(objX + 135, objY, objX + 90, objY - 140);
+  ctx.closePath();
+  ctx.fill();
+
+  // Mata ilusi menyala merah-oranye
+  ctx.fillStyle = "#ff5470";
+  ctx.shadowColor = "#ff5470";
+  ctx.shadowBlur = 25;
+  ctx.beginPath();
+  ctx.ellipse(objX - 22, objY - 205, 12, 7, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(objX + 22, objY - 205, 12, 7, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // Kotak pemindai wajah Pareidolia (Face Recognition Matrix)
+  ctx.save();
+  const boxColor = revealFactor > 0.55 ? "#2cb67d" : "#ff8906";
+  ctx.strokeStyle = boxColor;
+  ctx.lineWidth = 4;
+  ctx.setLineDash([14, 8]);
+  drawRoundedRect(ctx, objX - 115, objY - 295, 230, 210, 16);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+  drawRoundedRect(ctx, objX - 145, objY - 355, 290, 46, 10);
+  ctx.fill();
+  ctx.strokeStyle = boxColor;
+  ctx.stroke();
+
+  ctx.fillStyle = boxColor;
+  ctx.font = "bold 20px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(
+    revealFactor > 0.55 ? "REALITA: GANTUNGAN BAJU" : "PAREIDOLIA: SOSOK WAJAH (96%)",
+    objX,
+    objY - 325
+  );
+  ctx.restore();
+
+  // Karakter Manusia dengan senter yang menyinari objek
+  drawHumanCharacter(ctx, 235, 1110, 1.1, t, {
+    mood: revealFactor > 0.55 ? "calm" : "scared",
+    hasFlashlight: true,
+    flashlightAngle: -0.22,
+    lookDir: 1,
+    shirtColor: "#ea580c"
+  });
+
+  // Diagram Otak di Kiri Atas yang menjelaskan pemrosesan pola wajah (Fusiform Face Area)
+  drawBrainIllustration(ctx, 280, 585, 0.95, t, "visual", "#ff8906");
+}
+
+/**
+ * ADEGAN 3: Sleep Paralysis (Ketindihan) — Manusia Terbaring Kaku di Kasur,
+ * Bayangan Hitam Menekan Dada, dan Diagram Otak REM vs Saraf Motorik Terkunci
+ */
+function renderScene2(ctx, t, sceneProgress) {
+  // Latar kamar tidur jam 03:15 dini hari
+  const bg = ctx.createLinearGradient(0, 260, 0, 1450);
+  bg.addColorStop(0, "#0b071e");
+  bg.addColorStop(1, "#1a103c");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 260, WIDTH, 1190);
+
+  // Jam Dinding Digital menunjukkan 03:15 AM
+  ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+  ctx.strokeStyle = "#e53170";
+  ctx.lineWidth = 3;
+  drawRoundedRect(ctx, 730, 380, 240, 82, 16);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#ff4d6d";
+  ctx.font = "bold 44px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(Math.floor(t * 2) % 2 === 0 ? "03:15" : "03 15", 850, 437);
+
+  // Panel Otak: REM Aktif vs Motor Cortex Terkunci
+  drawBrainIllustration(ctx, 310, 560, 1.0, t, "amygdala", "#e53170");
+
+  // Badge status tidur di kanan tengah
+  const badges = [
+    { label: "KESADARAN VISUAL: AKTIF", color: "#00f2fe", y: 520 },
+    { label: "FASE MIMPI (REM): BOCOR", color: "#ff8906", y: 585 },
+    { label: "OTOT TUBUH: TERKUNCI (ATONIA)", color: "#e53170", y: 650 }
+  ];
+  badges.forEach((b) => {
+    ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+    ctx.strokeStyle = b.color;
+    ctx.lineWidth = 2.5;
+    drawRoundedRect(ctx, 520, b.y, 470, 50, 12);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 20px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(b.label, 545, b.y + 32);
+  });
+
+  // Kasur / Tempat Tidur
+  const bedY = 1230;
+  ctx.fillStyle = "#1e293b";
+  drawRoundedRect(ctx, 110, bedY, 860, 150, 24);
+  ctx.fill();
+  // Sandaran Kepala Kasur
+  ctx.fillStyle = "#334155";
+  drawRoundedRect(ctx, 110, bedY - 140, 65, 260, 16);
+  ctx.fill();
+  // Bantal
+  ctx.fillStyle = "#e2e8f0";
+  drawRoundedRect(ctx, 185, bedY - 40, 150, 52, 22);
+  ctx.fill();
+
+  // Tubuh Manusia Terbaring Kaku di Atas Kasur
+  ctx.save();
+  // Kepala manusia di atas bantal (mata melirik panik ke arah bayangan di dadanya)
+  ctx.fillStyle = "#f3cfb3";
+  ctx.beginPath();
+  ctx.arc(265, bedY - 58, 46, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mata terbuka lebar melirik ke arah dada
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.ellipse(282, bedY - 68, 12, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#0f172a";
+  ctx.beginPath();
+  ctx.arc(287 + Math.sin(t * 10) * 2, bedY - 68, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Selimut & Badan Terkunci
+  const blanketGrad = ctx.createLinearGradient(320, bedY - 55, 880, bedY + 40);
+  blanketGrad.addColorStop(0, "#3b82f6");
+  blanketGrad.addColorStop(1, "#1d4ed8");
+  ctx.fillStyle = blanketGrad;
+  drawRoundedRect(ctx, 315, bedY - 48, 590, 95, 35);
+  ctx.fill();
+
+  // Rantai / Garis Saraf Merah yang Mengunci Tubuh (Visualisasi Muscle Atonia)
+  ctx.strokeStyle = `rgba(229, 49, 112, ${0.6 + 0.4 * Math.sin(t * 7)})`;
+  ctx.lineWidth = 6;
+  for (let lockX = 390; lockX <= 790; lockX += 100) {
+    ctx.beginPath();
+    ctx.moveTo(lockX, bedY - 52);
+    ctx.lineTo(lockX + 25, bedY + 50);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // SOSOK BAYANGAN HITAM (HALUSINASI AMIGDALA) DUDUK DI ATAS DADA
+  ctx.save();
+  const shadowX = 565;
+  const shadowY = bedY - 175 + Math.sin(t * 3) * 8;
+
+  // Aura asap hitam keunguan
+  const smokeGrad = ctx.createRadialGradient(shadowX, shadowY, 20, shadowX, shadowY, 210);
+  smokeGrad.addColorStop(0, "rgba(10, 5, 20, 0.95)");
+  smokeGrad.addColorStop(0.55, "rgba(127, 90, 240, 0.45)");
+  smokeGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = smokeGrad;
+  ctx.beginPath();
+  ctx.arc(shadowX, shadowY, 210, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tubuh bayangan membungkuk menekan dada
+  ctx.fillStyle = "rgba(8, 6, 16, 0.94)";
+  ctx.beginPath();
+  ctx.arc(shadowX - 45, shadowY - 75, 48, 0, Math.PI * 2); // kepala
+  ctx.moveTo(shadowX - 45, shadowY - 30);
+  ctx.quadraticCurveTo(shadowX + 85, shadowY - 20, shadowX + 75, shadowY + 135);
+  ctx.lineTo(shadowX - 95, shadowY + 135);
+  ctx.quadraticCurveTo(shadowX - 85, shadowY + 20, shadowX - 45, shadowY - 30);
+  ctx.fill();
+
+  // Mata merah menyala milik halusinasi
+  ctx.fillStyle = "#e53170";
+  ctx.shadowColor = "#e53170";
+  ctx.shadowBlur = 20;
+  ctx.beginPath();
+  ctx.ellipse(shadowX - 62, shadowY - 70, 10, 5, 0.25, 0, Math.PI * 2);
+  ctx.ellipse(shadowX - 30, shadowY - 70, 10, 5, -0.15, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Panah tekanan ke dada
+  ctx.strokeStyle = "#e53170";
+  ctx.lineWidth = 5;
+  for (let a = -1; a <= 1; a++) {
+    const ax = shadowX + a * 55;
+    const ay = bedY - 110 + ((t * 60) % 45);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay - 25);
+    ctx.lineTo(ax, ay);
+    ctx.lineTo(ax - 10, ay - 10);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax + 10, ay - 10);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * ADEGAN 4: Gelombang Infrasonik 18.9 Hz — Kipas/Pipa Bergetar, Gelombang Frekuensi Rendah,
+ * Anatomi Bola Mata Bergetar (Resonansi), dan Ilusi Bayangan Putih di Sudut Mata
+ */
+function renderScene3(ctx, t, sceneProgress) {
+  ctx.fillStyle = "#06101e";
+  ctx.fillRect(0, 260, WIDTH, 1190);
+
+  // Kipas Ventilasi Tua di Kiri Tengah (Sumber Infrasonik 18.9 Hz)
+  const fanX = 185;
+  const fanY = 740;
+  ctx.save();
+  ctx.translate(fanX, fanY);
+  ctx.fillStyle = "#1e293b";
+  ctx.strokeStyle = "#00ebc7";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(0, 0, 110, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Baling-baling kipas berputar
+  ctx.save();
+  ctx.rotate(t * 5.5);
+  ctx.fillStyle = "#475569";
+  for (let b = 0; b < 4; b++) {
+    ctx.rotate(Math.PI / 2);
+    drawRoundedRect(ctx, -18, 12, 36, 82, 14);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.fillStyle = "#00ebc7";
+  ctx.beginPath();
+  ctx.arc(0, 0, 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Gelombang akustik 18.9 Hz merambat dari kipas ke Bola Mata
+  for (let w = 0; w < 6; w++) {
+    const prog = ((t * 0.85 + w / 6) % 1);
+    const wx = lerp(fanX + 90, 560, prog);
+    const radiusY = lerp(60, 220, prog);
+    ctx.strokeStyle = hexToRgba("#00ebc7", (1 - prog) * 0.85);
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(wx, fanY, radiusY, -0.45 * Math.PI, 0.45 * Math.PI);
+    ctx.stroke();
+  }
+
+  // ANATOMI BOLA MATA MANUSIA RAKSASA YANG BERGETAR (RESONANSI 18.9 Hz)
+  const eyeX = 650;
+  const eyeY = 740;
+  const vibX = Math.sin(t * 55) * 6.5;
+  const vibY = Math.cos(t * 48) * 5.5;
+
+  ctx.save();
+  ctx.translate(eyeX + vibX, eyeY + vibY);
+
+  // Saraf optik di belakang mata
+  ctx.strokeStyle = "#f43f5e";
+  ctx.lineWidth = 28;
+  ctx.beginPath();
+  ctx.moveTo(110, 0);
+  ctx.quadraticCurveTo(210, 20, 290, 80);
+  ctx.stroke();
+
+  // Ghosting / bayangan getaran bola mata
+  [-1, 1].forEach((dir) => {
+    ctx.strokeStyle = "rgba(0, 235, 199, 0.28)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(dir * 12, -dir * 8, 135, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
+  // Sklera (bola mata putih)
+  const eyeGrad = ctx.createRadialGradient(-30, -30, 20, 0, 0, 135);
+  eyeGrad.addColorStop(0, "#ffffff");
+  eyeGrad.addColorStop(0.8, "#e2e8f0");
+  eyeGrad.addColorStop(1, "#94a3b8");
+  ctx.fillStyle = eyeGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, 135, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pembuluh darah kapiler mata
+  ctx.strokeStyle = "rgba(239, 68, 68, 0.45)";
+  ctx.lineWidth = 2.5;
+  for (let v = -2; v <= 2; v++) {
+    ctx.beginPath();
+    ctx.moveTo(80, v * 32);
+    ctx.quadraticCurveTo(30, v * 20 + 10, -20, v * 28);
+    ctx.stroke();
+  }
+
+  // Iris & Pupil menghadap ke kiri (ke arah gelombang suara)
+  ctx.fillStyle = "#0284c7";
+  ctx.beginPath();
+  ctx.ellipse(-98, 0, 32, 68, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#0f172a";
+  ctx.beginPath();
+  ctx.ellipse(-108, 0, 16, 36, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Kornea transparan
+  ctx.strokeStyle = "#38bdf8";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(-95, 0, 68, 0.55 * Math.PI, 1.45 * Math.PI);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // Bayangan Hantu Semu yang muncul-hilang di sudut pandangan karena getaran mata
+  drawGhostEntity(ctx, 880, 510, 0.72, t * 1.8, 0.45 + 0.25 * Math.sin(t * 14), "#00ebc7", 0);
+
+  // Layar Osiloskop Frekuensi 18.9 Hz di Bawah
+  const oscX = 90;
+  const oscY = 1040;
+  const oscW = 900;
+  const oscH = 260;
+
+  ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+  ctx.strokeStyle = "#00ebc7";
+  ctx.lineWidth = 3;
+  drawRoundedRect(ctx, oscX, oscY, oscW, oscH, 20);
+  ctx.fill();
+  ctx.stroke();
+
+  // Kurva Sinus 18.9 Hz
+  ctx.strokeStyle = "#00ebc7";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  for (let px = 0; px <= oscW - 60; px += 8) {
+    const py =
+      oscY +
+      oscH / 2 +
+      Math.sin(px * 0.035 - t * 12) * 65 * Math.sin(px * 0.004 + t * 2);
+    if (px === 0) ctx.moveTo(oscX + 30 + px, py);
+    else ctx.lineTo(oscX + 30 + px, py);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 24px monospace";
+  ctx.textAlign = "left";
+  ctx.fillText("FREKUENSI RESONANSI OPTIK: 18.9 Hz (INFRASONIK)", oscX + 35, oscY + 45);
+}
+
+/**
+ * ADEGAN 5: Gas Karbon Monoksida (CO) — Pipa Pemanas Bocor, Manusia Pusing Dikelilingi
+ * Halusinasi Hantu, dan Zoom Pembuluh Darah (CO Mengikat Sel Darah Merah -> Hipoksia)
+ */
+function renderScene4(ctx, t, sceneProgress) {
+  ctx.fillStyle = "#071716";
+  ctx.fillRect(0, 260, WIDTH, 1190);
+
+  // Pemanas / Pipa Gas Tua Bocor di Kiri Bawah
+  ctx.fillStyle = "#334155";
+  ctx.strokeStyle = "#64748b";
+  ctx.lineWidth = 4;
+  drawRoundedRect(ctx, 70, 980, 150, 340, 18);
+  ctx.fill();
+  ctx.stroke();
+
+  // Celah bocor menyemburkan gas CO hijau-kelabu samar
+  for (let g = 0; g < 16; g++) {
+    const prog = (t * 0.45 + g / 16) % 1;
+    const gx = 180 + prog * 420 + Math.sin(t * 2 + g) * 35;
+    const gy = 1040 - prog * 480;
+    const gr = 24 + prog * 65;
+    ctx.fillStyle = hexToRgba("#2cb67d", (1 - prog) * 0.32);
+    ctx.beginPath();
+    ctx.arc(gx, gy, gr, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (g % 2 === 0) {
+      ctx.fillStyle = `rgba(167, 243, 208, ${(1 - prog) * 0.85})`;
+      ctx.font = "bold 20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("CO", gx, gy + 7);
+    }
+  }
+
+  // Karakter Manusia Pusing Memegang Kepala
+  drawHumanCharacter(ctx, 350, 1110, 1.1, t, {
+    mood: "dizzy",
+    hasFlashlight: false,
+    lookDir: -1,
+    shirtColor: "#059669"
+  });
+
+  // Halusinasi hantu berputar di sekitar kepala manusia akibat hipoksia
+  drawGhostEntity(ctx, 220 + Math.sin(t * 2) * 30, 680, 0.68, t, 0.65, "#2cb67d", 0);
+
+  // PANEL MIKROSKOPIS PEMBULUH DARAH & OTAK DI SISI KANAN
+  const vesselX = 560;
+  const vesselY = 470;
+  const vesselW = 450;
+  const vesselH = 380;
+
+  ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+  ctx.strokeStyle = "#ff5470";
+  ctx.lineWidth = 3;
+  drawRoundedRect(ctx, vesselX, vesselY, vesselW, vesselH, 24);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 22px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("MIKROSKOPIS DARAH: IKATAN CO-Hb", vesselX + vesselW / 2, vesselY + 42);
+
+  // Saluran Pembuluh Darah
+  ctx.fillStyle = "#450a0a";
+  drawRoundedRect(ctx, vesselX + 25, vesselY + 70, vesselW - 50, 170, 28);
+  ctx.fill();
+
+  // Sel Darah Merah (Eritrosit) mengalir & diikat oleh molekul CO
+  for (let c = 0; c < 4; c++) {
+    const cx = vesselX + 60 + (((t * 85 + c * 105) % (vesselW - 120)));
+    const cy = vesselY + 155 + Math.sin(t * 3 + c) * 18;
+
+    // Sel darah merah
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 34, 24, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#991b1b";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 16, 10, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Molekul CO menempel mengunci Hemoglobin
+    ctx.fillStyle = "#2cb67d";
+    ctx.beginPath();
+    ctx.arc(cx + 18, cy - 16, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#06281e";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText("CO", cx + 18, cy - 11);
+  }
+
+  // Bar Indikator Kadar Oksigen Otak Menurun (Hipoksia)
+  const o2Level = clamp(0.82 - sceneProgress * 0.52, 0.28, 0.85);
+  ctx.fillStyle = "#1e293b";
+  drawRoundedRect(ctx, vesselX + 35, vesselY + 275, vesselW - 70, 34, 12);
+  ctx.fill();
+
+  ctx.fillStyle = o2Level < 0.45 ? "#ff5470" : "#2cb67d";
+  drawRoundedRect(ctx, vesselX + 35, vesselY + 275, (vesselW - 70) * o2Level, 34, 12);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 18px sans-serif";
+  ctx.fillText(
+    `SUPLAI OKSIGEN OTAK: ${Math.round(o2Level * 100)}% (HIPOKSIA)`,
+    vesselX + vesselW / 2,
+    vesselY + 345
+  );
+
+  // Diagram Otak Hipoksia di Kanan Bawah
+  drawBrainIllustration(ctx, 785, 1085, 0.92, t, "hypoxia", "#ff5470");
+}
+
+/**
+ * ADEGAN 6: Medan Elektromagnetik (EMF) — Panel Listrik Tua Bocor, Alat EMF Meter,
+ * Stimulasi Lobus Temporal, dan Sensasi Ada Sosok Berdiri di Belakang (Sensed Presence)
+ */
+function renderScene5(ctx, t, sceneProgress) {
+  ctx.fillStyle = "#0d0922";
+  ctx.fillRect(0, 260, WIDTH, 1190);
+
+  // Panel Listrik Tua di Kiri Atas dengan Percikan & Gelombang EMF
+  const boxX = 85;
+  const boxY = 470;
+  ctx.fillStyle = "#1e293b";
+  ctx.strokeStyle = "#9b5de5";
+  ctx.lineWidth = 4;
+  drawRoundedRect(ctx, boxX, boxY, 175, 250, 14);
+  ctx.fill();
+  ctx.stroke();
+
+  // Simbol tegangan tinggi
+  ctx.fillStyle = "#facc15";
+  ctx.beginPath();
+  ctx.moveTo(boxX + 95, boxY + 55);
+  ctx.lineTo(boxX + 60, boxY + 125);
+  ctx.lineTo(boxX + 92, boxY + 125);
+  ctx.lineTo(boxX + 75, boxY + 195);
+  ctx.lineTo(boxX + 125, boxY + 110);
+  ctx.lineTo(boxX + 92, boxY + 110);
+  ctx.closePath();
+  ctx.fill();
+
+  // Cincin Gelombang Elektromagnetik (EMF) memancar ke kepala manusia
+  for (let e = 0; e < 5; e++) {
+    const prog = (t * 0.65 + e / 5) % 1;
+    const r = 60 + prog * 480;
+    ctx.strokeStyle = hexToRgba("#9b5de5", (1 - prog) * 0.75);
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(boxX + 175, boxY + 125, r, -0.35 * Math.PI, 0.45 * Math.PI);
+    ctx.stroke();
+  }
+
+  // Alat Pengukur EMF Meter di Kanan Atas
+  const meterX = 630;
+  const meterY = 430;
+  ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
+  ctx.strokeStyle = "#00bbf9";
+  ctx.lineWidth = 3;
+  drawRoundedRect(ctx, meterX, meterY, 360, 220, 20);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 20px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("DETEKTOR MEDAN EMF (mG)", meterX + 180, meterY + 38);
+
+  // Busur skala EMF
+  const colors = ["#2cb67d", "#facc15", "#f97316", "#ef4444", "#9b5de5"];
+  colors.forEach((col, idx) => {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 18;
+    const a1 = Math.PI + (idx * Math.PI) / 5;
+    const a2 = Math.PI + ((idx + 0.92) * Math.PI) / 5;
+    ctx.beginPath();
+    ctx.arc(meterX + 180, meterY + 170, 95, a1, a2);
+    ctx.stroke();
+  });
+
+  // Jarum EMF bergerak ke zona merah/ungu tinggi
+  const needleAngle = Math.PI + (0.78 + Math.sin(t * 9) * 0.12) * Math.PI;
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(meterX + 180, meterY + 170);
+  ctx.lineTo(
+    meterX + 180 + Math.cos(needleAngle) * 85,
+    meterY + 170 + Math.sin(needleAngle) * 85
+  );
+  ctx.stroke();
+
+  // Diagram Lobus Temporal Otak
+  drawBrainIllustration(ctx, 290, 880, 0.88, t, "temporal", "#9b5de5");
+
+  // Karakter Manusia Merinding & Sosok Bayangan Semu Tepat di Belakang Bahunya (Sensed Presence)
+  drawGhostEntity(ctx, 775, 980, 1.15, t, 0.62, "#9b5de5", 0);
+  drawHumanCharacter(ctx, 645, 1120, 1.12, t, {
+    mood: "scared",
+    hasFlashlight: false,
+    lookDir: 1,
+    shirtColor: "#6d28d9"
+  });
+}
+
+/**
+ * ADEGAN 7: Kesimpulan Ilmiah — Cahaya Logika Mengurai Hantu Menjadi Partikel Sains,
+ * Manusia Tersenyum Tenang, dan Kartu Ringkasan 5 Faktor Sains
+ */
+function renderScene6(ctx, t, sceneProgress) {
+  // Latar bertransisi menjadi lebih terang & hangat dengan nuansa emas-toska
+  const bg = ctx.createLinearGradient(0, 260, 0, 1450);
+  bg.addColorStop(0, "#0b192c");
+  bg.addColorStop(1, "#102a43");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 260, WIDTH, 1190);
+
+  // Sorot cahaya logika keemasan dari atas
+  const rayGrad = ctx.createRadialGradient(540, 420, 30, 540, 720, 620);
+  rayGrad.addColorStop(0, "rgba(255, 209, 102, 0.35)");
+  rayGrad.addColorStop(0.6, "rgba(6, 214, 160, 0.12)");
+  rayGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = rayGrad;
+  ctx.beginPath();
+  ctx.arc(540, 720, 620, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Hantu perlahan terurai menjadi simbol sains (Dissolve)
+  const dissolve = clamp(sceneProgress * 1.15, 0, 0.92);
+  drawGhostEntity(ctx, 770, 960, 1.05 * (1 - dissolve * 0.25), t, 0.85, "#ffd166", dissolve);
+
+  // Partikel rumus & simbol ilmiah yang terlepas dari hantu
+  const symbols = ["18.9 Hz", "CO", "REM", "EMF", "PAREIDOLIA", "NEURON"];
+  symbols.forEach((sym, i) => {
+    const sy = 1020 - (((t * 75 + i * 85) % 460));
+    const sx = 720 + Math.sin(t * 2 + i * 1.3) * 120;
+    ctx.fillStyle = i % 2 === 0 ? "#ffd166" : "#06d6a0";
+    ctx.font = "bold 22px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(sym, sx, sy);
+  });
+
+  // Karakter Manusia Tersenyum Tenang & Percaya Diri
+  drawHumanCharacter(ctx, 240, 1120, 1.12, t, {
+    mood: "calm",
+    hasFlashlight: false,
+    lookDir: 1,
+    shirtColor: "#0d9488"
+  });
+
+  // 5 Kartu Ringkasan Penjelasan Ilmiah Hantu
+  const summaryItems = [
+    { no: "01", title: "Pareidolia Visual", desc: "Otak menebak pola wajah pada bayangan gelap", col: "#ff8906" },
+    { no: "02", title: "Sleep Paralysis", desc: "Kesadaran bangun saat otot terkunci di fase REM", col: "#e53170" },
+    { no: "03", title: "Infrasonik 18.9 Hz", desc: "Getaran frekuensi rendah pada bola mata", col: "#00ebc7" },
+    { no: "04", title: "Gas Karbon Monoksida", desc: "Hipoksia oksigen pemicu halusinasi ruangan", col: "#2cb67d" },
+    { no: "05", title: "Medan Elektromagnetik", desc: "Stimulasi lobus temporal otak manusia", col: "#9b5de5" }
+  ];
+
+  summaryItems.forEach((item, idx) => {
+    const appear = easeOutCubic((sceneProgress - idx * 0.08) * 3.2);
+    if (appear <= 0) return;
+
+    ctx.save();
+    const cardX = 85 + (1 - appear) * -80;
+    const cardY = 420 + idx * 102;
+    ctx.globalAlpha = appear;
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+    ctx.strokeStyle = item.col;
+    ctx.lineWidth = 3;
+    drawRoundedRect(ctx, cardX, cardY, 540, 86, 16);
+    ctx.fill();
+    ctx.stroke();
+
+    // Nomor
+    ctx.fillStyle = item.col;
+    drawRoundedRect(ctx, cardX + 14, cardY + 15, 56, 56, 12);
+    ctx.fill();
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "bold 24px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(item.no, cardX + 42, cardY + 52);
+
+    // Teks
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 23px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(item.title, cardX + 86, cardY + 38);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "18px sans-serif";
+    ctx.fillText(item.desc, cardX + 86, cardY + 66);
+    ctx.restore();
+  });
+}
+
+// ============================================================================
+// UI OVERLAY: HEADER SAINS, SUBTITLE NARASI DINAMIS, & PROGRESS BAR
+// ============================================================================
+function renderFrame(ctx, t) {
+  // Cari adegan aktif saat ini
+  const scene =
+    SCENES.find((s) => t >= s.start && t < s.end) || SCENES[SCENES.length - 1];
+  const sceneDuration = scene.end - scene.start;
+  const localT = t - scene.start;
+  const sceneProgress = clamp(localT / sceneDuration, 0, 1);
+
+  // 1. Bersihkan Kanvas Utama
+  ctx.fillStyle = "#050814";
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  // 2. Render Ilustrasi & Animasi Latar Sesuai Adegan
+  switch (scene.id) {
+    case 0:
+      renderScene0(ctx, t, sceneProgress);
+      break;
+    case 1:
+      renderScene1(ctx, t, sceneProgress);
+      break;
+    case 2:
+      renderScene2(ctx, t, sceneProgress);
+      break;
+    case 3:
+      renderScene3(ctx, t, sceneProgress);
+      break;
+    case 4:
+      renderScene4(ctx, t, sceneProgress);
+      break;
+    case 5:
+      renderScene5(ctx, t, sceneProgress);
+      break;
+    case 6:
+      renderScene6(ctx, t, sceneProgress);
+      break;
+  }
+
+  // 3. Partikel Atmosferik Melayang
+  PARTICLES.forEach((p) => {
+    const px = (p.x + p.speedX * t + Math.sin(t + p.phase) * 18 + WIDTH) % WIDTH;
+    const py = (p.y + p.speedY * t + HEIGHT) % HEIGHT;
+    ctx.fillStyle = hexToRgba(scene.accent, 0.25 + 0.15 * Math.sin(t * 2 + p.phase));
+    ctx.beginPath();
+    ctx.arc(px, py, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // 4. Vignette Sinematik
+  const vig = ctx.createRadialGradient(
+    WIDTH / 2,
+    HEIGHT / 2,
+    WIDTH * 0.32,
+    WIDTH / 2,
+    HEIGHT / 2,
+    HEIGHT * 0.65
+  );
+  vig.addColorStop(0, "rgba(0,0,0,0)");
+  vig.addColorStop(1, "rgba(2, 4, 12, 0.72)");
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  // 5. Panel Header Atas (Judul & Kategori Ilmiah)
+  const headerAnim = easeOutCubic(localT / 0.7);
+  ctx.save();
+  ctx.translate(0, (1 - headerAnim) * -60);
+
+  ctx.fillStyle = "rgba(10, 15, 30, 0.88)";
+  ctx.strokeStyle = hexToRgba(scene.accent, 0.75);
+  ctx.lineWidth = 3;
+  drawRoundedRect(ctx, 50, 65, WIDTH - 100, 215, 28);
+  ctx.fill();
+  ctx.stroke();
+
+  // Badge Tag
+  ctx.fillStyle = hexToRgba(scene.accent, 0.2);
+  drawRoundedRect(ctx, 85, 90, 420, 42, 12);
+  ctx.fill();
+  ctx.fillStyle = scene.accent;
+  ctx.font = "bold 21px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(scene.tag, 105, 118);
+
+  // Indikator Waktu
+  const mm = String(Math.floor(t / 60)).padStart(2, "0");
+  const ss = String(Math.floor(t % 60)).padStart(2, "0");
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "bold 22px monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(`${mm}:${ss} / 01:30`, WIDTH - 85, 118);
+
+  // Judul Utama Adegan
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 44px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(scene.title, 85, 182);
+
+  // Subjudul Penjelasan Singkat
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "25px sans-serif";
+  ctx.fillText(scene.subtitle, 85, 232);
+  ctx.restore();
+
+  // 6. Kotak Subtitle Narasi Bawah dengan Highlight Kata Aktif
+  ctx.save();
+  const subBoxX = 50;
+  const subBoxY = 1445;
+  const subBoxW = WIDTH - 100;
+  const subBoxH = 365;
+
+  ctx.fillStyle = "rgba(8, 12, 26, 0.92)";
+  ctx.strokeStyle = hexToRgba(scene.accent, 0.65);
+  ctx.lineWidth = 3;
+  drawRoundedRect(ctx, subBoxX, subBoxY, subBoxW, subBoxH, 28);
+  ctx.fill();
+  ctx.stroke();
+
+  // Gelombang Audio Visualizer Kecil di Atas Kotak Subtitle
+  const bars = 28;
+  const barStartX = WIDTH / 2 - (bars * 16) / 2;
+  for (let b = 0; b < bars; b++) {
+    const bh = 8 + Math.abs(Math.sin(t * 10 + b * 0.55)) * 22;
+    ctx.fillStyle = b % 2 === 0 ? scene.accent : scene.secondary;
+    drawRoundedRect(ctx, barStartX + b * 16, subBoxY + 28 - bh / 2, 9, bh, 4);
+    ctx.fill();
+  }
+
+  // Teks Narasi Terbungkus Rapi
+  ctx.font = "bold 31px sans-serif";
+  const lines = wrapText(ctx, scene.narration, subBoxW - 90);
+  const startTextY = subBoxY + 105;
+  const lineHeight = 48;
+
+  // Hitung progres kata untuk efek baca aktif
+  const activeLineIndex = Math.floor(sceneProgress * lines.length);
+
+  lines.forEach((line, idx) => {
+    const ly = startTextY + idx * lineHeight;
+    ctx.textAlign = "center";
+    if (idx < activeLineIndex) {
+      ctx.fillStyle = "#e2e8f0";
+    } else if (idx === activeLineIndex) {
+      ctx.fillStyle = scene.accent;
+    } else {
+      ctx.fillStyle = "rgba(148, 163, 184, 0.65)";
+    }
+    ctx.fillText(line, WIDTH / 2, ly);
+  });
+
+  // Bar Progres Total Video (0 - 90 Detik)
+  const barY = 1845;
+  ctx.fillStyle = "rgba(30, 41, 59, 0.9)";
+  drawRoundedRect(ctx, 50, barY, WIDTH - 100, 18, 9);
+  ctx.fill();
+
+  const totalProg = clamp(t / TOTAL_DURATION, 0, 1);
+  const progGrad = ctx.createLinearGradient(50, 0, WIDTH - 50, 0);
+  progGrad.addColorStop(0, "#00f2fe");
+  progGrad.addColorStop(0.5, "#e53170");
+  progGrad.addColorStop(1, "#ffd166");
+  ctx.fillStyle = progGrad;
+  drawRoundedRect(ctx, 50, barY, (WIDTH - 100) * totalProg, 18, 9);
+  ctx.fill();
+  ctx.restore();
+
+  // 7. Transisi Fade-In / Fade-Out Halus Antar Adegan
+  let fadeAlpha = 0;
+  if (localT < 0.35) {
+    fadeAlpha = 1 - localT / 0.35;
+  } else if (sceneDuration - localT < 0.35) {
+    fadeAlpha = 1 - (sceneDuration - localT) / 0.35;
+  }
+  if (fadeAlpha > 0) {
+    ctx.fillStyle = `rgba(4, 6, 14, ${clamp(fadeAlpha * 0.65, 0, 1)})`;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+}
+
+// ============================================================================
+// GENERATOR AUDIO: NARasi TTS ANTI-TABRAKAN + BACKSOUND CREEPY DARK AMBIENT
 // ============================================================================
 function getAudioDuration(filePath) {
   try {
-    const cmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
-    const out = execSync(cmd).toString().trim();
-    const parsed = parseFloat(out);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    const out = execSync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`,
+      { encoding: "utf8" }
+    ).trim();
+    const d = parseFloat(out);
+    return Number.isFinite(d) && d > 0 ? d : 0;
   } catch (e) {
     return 0;
   }
 }
 
-async function generateVoiceSegment(text, outputPath) {
-  if (typeof global.generateStudioVoice === 'function') {
-    await global.generateStudioVoice(text, outputPath, VOICE_MODEL);
-    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 100) {
-      return;
-    }
-  }
-  // Fallback darurat jika fungsi global mengalami kendala di environment tertentu
+async function createFallbackVoice(text, outPath, maxDuration) {
+  const dur = Math.max(2, maxDuration - 1);
   execSync(
-    `ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 4.0 -q:a 9 -acodec libmp3lame "${outputPath}"`,
-    { stdio: 'ignore' }
+    `ffmpeg -y -f lavfi -i "anullsrc=r=44100:cl=stereo" -t ${dur} -q:a 4 "${outPath}"`,
+    { stdio: "ignore" }
   );
 }
 
-async function buildMasterAudio(tempDir) {
-  console.log('[AUDIO] Memulai pembuatan narasi suara bertahap (VOICE_MODEL: ' + VOICE_MODEL + ')...');
-  const segmentFiles = [];
+async function buildMasterAudio() {
+  console.log("[1/3] Menghasilkan narasi suara TTS & menghitung durasi anti-tabrakan...");
+  const preparedVoiceFiles = [];
 
-  for (let i = 0; i < SEGMENTS.length; i++) {
-    const seg = SEGMENTS[i];
-    const rawMp3 = path.join(tempDir, `seg_${i}_raw.mp3`);
-    const fitWav = path.join(tempDir, `seg_${i}_fit.wav`);
+  for (let i = 0; i < SCENES.length; i++) {
+    const scene = SCENES[i];
+    const slotDuration = scene.end - scene.start;
+    const rawMp3 = path.join(TEMP_DIR, `raw_voice_${i}.mp3`);
+    const slotWav = path.join(TEMP_DIR, `slot_voice_${i}.wav`);
 
-    await generateVoiceSegment(seg.narration, rawMp3);
-
-    const slotDuration = seg.end - seg.start;
-    const safetyWindow = slotDuration - 0.35; // Jeda aman 0.35 detik antar kalimat agar tidak tabrakan
-    const actualDur = getAudioDuration(rawMp3);
-
-    // Jika durasi audio TTS melebihi slot aman, percepat sedikit secara dinamis (tanpa 1.18 statis)
-    if (actualDur > safetyWindow && safetyWindow > 1.0) {
-      const ratio = clamp(actualDur / safetyWindow, 1.01, 1.35).toFixed(3);
-      execSync(
-        `ffmpeg -y -i "${rawMp3}" -filter:a "atempo=${ratio}" -ar 44100 -ac 2 "${fitWav}"`,
-        { stdio: 'ignore' }
-      );
-    } else {
-      execSync(
-        `ffmpeg -y -i "${rawMp3}" -ar 44100 -ac 2 "${fitWav}"`,
-        { stdio: 'ignore' }
-      );
+    let generated = false;
+    if (typeof global.generateStudioVoice === "function") {
+      try {
+        await global.generateStudioVoice(scene.narration, rawMp3, VOICE_MODEL);
+        if (fs.existsSync(rawMp3) && fs.statSync(rawMp3).size > 200) {
+          generated = true;
+        }
+      } catch (err) {
+        console.warn(`Peringatan TTS Adegan ${i}:`, err.message);
+      }
     }
 
-    segmentFiles.push({
-      path: fitWav,
-      startMs: Math.round(seg.start * 1000)
-    });
-  }
+    if (!generated) {
+      await createFallbackVoice(scene.narration, rawMp3, slotDuration);
+    }
 
-  // Rangkai seluruh segmen audio tepat pada timestamp masing-masing + ambient mesin halus
-  const masterWav = path.join(tempDir, 'master_audio.wav');
-  const inputs = [];
-  const filterParts = [];
+    // Ukur durasi asli file TTS agar TIDAK PERNAH menabrak adegan berikutnya
+    const rawDur = getAudioDuration(rawMp3);
+    const maxVoiceWindow = slotDuration - 0.55; // Jeda aman minimal 0.55 detik antar adegan
 
-  // Input 0: Track keheningan dasar 40 detik
-  inputs.push('-f', 'lavfi', '-t', String(DURATION), '-i', 'anullsrc=r=44100:cl=stereo');
+    // Jika suara TTS lebih panjang dari slot adegan, sesuaikan kecepatannya secara presisi
+    // (Tanpa pernah memakai atempo=1.18 sesuai aturan)
+    let speedFilter = "";
+    if (rawDur > maxVoiceWindow && rawDur > 0) {
+      let ratio = rawDur / maxVoiceWindow;
+      if (Math.abs(ratio - 1.18) < 0.015) {
+        ratio = 1.21;
+      }
+      ratio = clamp(ratio, 1.02, 1.35);
+      speedFilter = `atempo=${ratio.toFixed(3)},`;
+    }
 
-  segmentFiles.forEach((seg, idx) => {
-    inputs.push('-i', seg.path);
-    const inputIdx = idx + 1;
-    filterParts.push(
-      `[${inputIdx}:a]adelay=${seg.startMs}|${seg.startMs},volume=1.15[v${inputIdx}]`
+    // Bungkus suara tepat ke dalam durasi slot adegan masing-masing (dijamin 0% tabrakan!)
+    const fadeOutStart = (slotDuration - 0.35).toFixed(2);
+    const filterChain = `${speedFilter}adelay=250|250,apad,atrim=0:${slotDuration},afade=t=out:st=${fadeOutStart}:d=0.30,volume=1.35`;
+
+    execSync(
+      `ffmpeg -y -i "${rawMp3}" -af "${filterChain}" -ar 44100 -ac 2 "${slotWav}"`,
+      { stdio: "ignore" }
     );
-  });
+    preparedVoiceFiles.push(slotWav);
+  }
 
-  const mixLabels = ['[0:a]', ...segmentFiles.map((_, idx) => `[v${idx + 1}]`)].join('');
-  const totalInputs = segmentFiles.length + 1;
-  filterParts.push(
-    `${mixLabels}amix=inputs=${totalInputs}:duration=first:dropout_transition=0,dynaudnorm=f=150:g=15[aout]`
+  // Gabungkan semua slot suara secara sekuensial (Total pasti = 90.0 detik)
+  const concatListPath = path.join(TEMP_DIR, "voice_list.txt");
+  const listContent = preparedVoiceFiles.map((f) => `file '${f}'`).join("\n");
+  fs.writeFileSync(concatListPath, listContent, "utf8");
+
+  const fullVoiceWav = path.join(TEMP_DIR, "full_voice.wav");
+  execSync(
+    `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${fullVoiceWav}"`,
+    { stdio: "ignore" }
   );
 
-  const filterComplex = filterParts.join(';');
-  const ffmpegArgs = [
-    '-y',
-    ...inputs,
-    '-filter_complex',
-    filterComplex,
-    '-map',
-    '[aout]',
-    '-t',
-    String(DURATION),
-    '-ar',
-    '44100',
-    '-ac',
-    '2',
-    masterWav
-  ];
+  // Buat Backsound Creepy Ilmiah (Dark Drone + Eerie Ghost Shimmer + Sub Heartbeat)
+  console.log("[2/3] Menyusun backsound creepy dark ambient (90 detik)...");
+  const bgmWav = path.join(TEMP_DIR, "creepy_bgm.wav");
+  const aevalExpr =
+    "0.22*sin(2*PI*55*t)+0.16*sin(2*PI*58.2*t)+0.12*sin(2*PI*110*t+1.5*sin(2*PI*0.25*t))+0.09*sin(2*PI*233.08*t)*exp(-2.2*mod(t\\,2.5))+0.07*sin(2*PI*311.13*t)* (0.5+0.5*sin(2*PI*0.18*t))";
 
-  execSync(`ffmpeg ${ffmpegArgs.map((a) => `"${a}"`).join(' ')}`, { stdio: 'ignore' });
-  console.log('[AUDIO] Master audio 40 detik berhasil disinkronkan tanpa tumpang tindih.');
-  return masterWav;
-}
-
-// ============================================================================
-// 5. KINEMATIKA MESIN 4-TAK & PARAMETER SIKLUS
-// ============================================================================
-function getEngineKinematics(timeSec, segment) {
-  let crankAngle = 0; // 0..720 derajat untuk 1 siklus 4-tak penuh (2 putaran kruk as)
-  let strokeType = 'intro';
-  let rpmValue = 2400;
-  let strokeProgress = 0;
-
-  const segElapsed = timeSec - segment.start;
-  const segDuration = segment.end - segment.start;
-  const normT = clamp(segElapsed / segDuration, 0, 1);
-
-  if (segment.phase === 'intro') {
-    // Putaran cepat & bertenaga untuk pembuka
-    crankAngle = (timeSec * 360) % 720;
-    rpmValue = Math.round(lerp(1200, 3800, easeInOutCubic(normT)));
-  } else if (segment.phase === 'components') {
-    // Putaran lambat elegan saat membedah komponen satu per satu
-    crankAngle = (timeSec * 150) % 720;
-    rpmValue = 1500;
-  } else if (segment.phase === 'intake') {
-    // Fokus Langkah 1: Hisap (0 -> 180 derajat, Piston turun dari TMA ke TMB)
-    // Diulang 2 kali secara halus agar visual gerakan menghisap terlihat sangat jelas
-    const cycleT = (normT * 1.6) % 1;
-    strokeProgress = easeInOutCubic(cycleT);
-    crankAngle = lerp(0, 180, strokeProgress);
-    rpmValue = 1800;
-  } else if (segment.phase === 'compression') {
-    // Fokus Langkah 2: Kompresi (180 -> 360 derajat, Piston naik dari TMB ke TMA)
-    const cycleT = (normT * 1.6) % 1;
-    strokeProgress = easeInOutCubic(cycleT);
-    crankAngle = lerp(180, 360, strokeProgress);
-    rpmValue = 2400;
-  } else if (segment.phase === 'power') {
-    // Fokus Langkah 3: Usaha / Ledakan (360 -> 540 derajat, Ledakan Busi -> Piston turun cepat)
-    const cycleT = (normT * 1.8) % 1;
-    strokeProgress = Math.pow(cycleT, 0.75); // Akselerasi cepat akibat ledakan
-    crankAngle = lerp(360, 540, strokeProgress);
-    rpmValue = 4500;
-  } else if (segment.phase === 'exhaust') {
-    // Fokus Langkah 4: Buang (540 -> 720 derajat) lalu transisi ke putaran kecepatan tinggi
-    if (normT < 0.55) {
-      const localT = normT / 0.55;
-      strokeProgress = easeInOutCubic(localT);
-      crankAngle = lerp(540, 720, strokeProgress);
-      rpmValue = 2800;
-    } else {
-      const highSpeedT = (normT - 0.55) / 0.45;
-      crankAngle = ((timeSec - segment.start) * 650) % 720;
-      rpmValue = Math.round(lerp(3200, 6200, highSpeedT));
-    }
-  }
-
-  // Tentukan langkah aktif berdasarkan sudut kruk as (0 - 720)
-  const modAngle = ((crankAngle % 720) + 720) % 720;
-  if (modAngle < 180) {
-    strokeType = 'intake';
-    strokeProgress = modAngle / 180;
-  } else if (modAngle < 360) {
-    strokeType = 'compression';
-    strokeProgress = (modAngle - 180) / 180;
-  } else if (modAngle < 540) {
-    strokeType = 'power';
-    strokeProgress = (modAngle - 360) / 180;
-  } else {
-    strokeType = 'exhaust';
-    strokeProgress = (modAngle - 540) / 180;
-  }
-
-  // Bukaan katup (0 = tertutup rapat, 1 = terbuka penuh)
-  const intakeValveOpen = strokeType === 'intake' ? Math.sin(strokeProgress * Math.PI) : 0;
-  const exhaustValveOpen = strokeType === 'exhaust' ? Math.sin(strokeProgress * Math.PI) : 0;
-
-  // Intensitas percikan busi & ledakan pada awal langkah Usaha (360 - 430 derajat)
-  let sparkIntensity = 0;
-  let explosionIntensity = 0;
-  if (strokeType === 'power') {
-    if (strokeProgress < 0.28) {
-      sparkIntensity = Math.sin((strokeProgress / 0.28) * Math.PI);
-    }
-    explosionIntensity = Math.pow(1 - strokeProgress, 1.5);
-  }
-
-  return {
-    crankAngle: modAngle,
-    strokeType,
-    strokeProgress,
-    intakeValveOpen,
-    exhaustValveOpen,
-    sparkIntensity,
-    explosionIntensity,
-    rpmValue
-  };
-}
-
-// ============================================================================
-// 6. KOMPONEN VISUAL, IKON, & EFEK VFX
-// ============================================================================
-
-function drawBackgroundGridAndVFX(ctx, timeSec, kin) {
-  // 1. Gradien Latar Belakang Engineering Gelap
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-  bgGrad.addColorStop(0, '#060b16');
-  bgGrad.addColorStop(0.5, '#0b1528');
-  bgGrad.addColorStop(1, '#050811');
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-  // 2. Cahaya Ambient Dinamis Berdasarkan Langkah Mesin
-  let glowColor = 'rgba(0, 242, 254, 0.14)';
-  if (kin.strokeType === 'compression') glowColor = 'rgba(255, 174, 0, 0.16)';
-  if (kin.strokeType === 'power') glowColor = 'rgba(255, 59, 48, 0.25)';
-  if (kin.strokeType === 'exhaust') glowColor = 'rgba(160, 174, 192, 0.14)';
-
-  const radGrad = ctx.createRadialGradient(WIDTH / 2, 960, 40, WIDTH / 2, 960, 620);
-  radGrad.addColorStop(0, glowColor);
-  radGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = radGrad;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-  // 3. Grid Blueprint Otomotif
-  ctx.save();
-  ctx.strokeStyle = 'rgba(0, 210, 255, 0.05)';
-  ctx.lineWidth = 1;
-  const gridSize = 60;
-  const offsetY = (timeSec * 20) % gridSize;
-  for (let x = 0; x <= WIDTH; x += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, HEIGHT);
-    ctx.stroke();
-  }
-  for (let y = offsetY; y <= HEIGHT; y += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(WIDTH, y);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // 4. Partikel Energi Melayang
-  ctx.save();
-  for (const p of bgParticles) {
-    const py = ((p.y + p.speedY * timeSec) % HEIGHT + HEIGHT) % HEIGHT;
-    const px = p.x + Math.sin(timeSec * 1.5 + p.r) * 18;
-    ctx.beginPath();
-    ctx.arc(px, py, p.r, 0, Math.PI * 2);
-    ctx.fillStyle = p.hue;
-    ctx.globalAlpha = p.alpha;
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-// Menggambar Ikon Kustom di Kartu Penjelasan Komponen
-function drawComponentIcon(ctx, type, cx, cy, radius, accentColor, timeSec) {
-  ctx.save();
-  ctx.translate(cx, cy);
-
-  // Lingkaran dasar ikon
-  ctx.beginPath();
-  ctx.arc(0, 0, radius, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(10, 22, 42, 0.9)';
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = accentColor;
-  ctx.stroke();
-
-  ctx.strokeStyle = '#ffffff';
-  ctx.fillStyle = accentColor;
-  ctx.lineWidth = 3.2;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  if (type === 'intake_valve' || type === 'exhaust_valve') {
-    // Ikon Katup Payung + Aliran Gas
-    const shiftY = Math.sin(timeSec * 6) * 5;
-    ctx.beginPath();
-    ctx.moveTo(0, -18 + shiftY);
-    ctx.lineTo(0, 10 + shiftY);
-    ctx.moveTo(-16, 10 + shiftY);
-    ctx.lineTo(16, 10 + shiftY);
-    ctx.lineTo(10, 4 + shiftY);
-    ctx.moveTo(-16, 10 + shiftY);
-    ctx.lineTo(-10, 4 + shiftY);
-    ctx.stroke();
-  } else if (type === 'piston') {
-    // Ikon Silinder Piston & Ring
-    drawRoundedRect(ctx, -15, -18, 30, 26, 4);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-15, -10);
-    ctx.lineTo(15, -10);
-    ctx.moveTo(-15, -4);
-    ctx.lineTo(15, -4);
-    ctx.moveTo(0, 8);
-    ctx.lineTo(0, 22);
-    ctx.stroke();
-  } else if (type === 'spark_plug') {
-    // Ikon Petir / Busi Pengapian
-    ctx.beginPath();
-    ctx.moveTo(4, -22);
-    ctx.lineTo(-12, 2);
-    ctx.lineTo(2, 2);
-    ctx.lineTo(-6, 22);
-    ctx.lineTo(14, -4);
-    ctx.lineTo(0, -4);
-    ctx.closePath();
-    ctx.fill();
-  } else if (type === 'crankshaft') {
-    // Ikon Roda Gigi / Putaran Kruk As
-    ctx.rotate(timeSec * 2.5);
-    ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, Math.PI * 2);
-    ctx.stroke();
-    for (let i = 0; i < 8; i++) {
-      const a = (i * Math.PI) / 4;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 12, Math.sin(a) * 12);
-      ctx.lineTo(Math.cos(a) * 20, Math.sin(a) * 20);
-      ctx.stroke();
-    }
-  } else {
-    // Ikon Mesin Utama
-    drawRoundedRect(ctx, -18, -12, 36, 26, 5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-10, -19);
-    ctx.lineTo(10, -19);
-    ctx.moveTo(0, -19);
-    ctx.lineTo(0, -12);
-    ctx.moveTo(18, 0);
-    ctx.lineTo(24, 0);
-    ctx.moveTo(24, -8);
-    ctx.lineTo(24, 8);
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
-// ============================================================================
-// 7. SIMULASI UTAMA: MESIN 4-TAK + PARTIKEL + CALLOUT KOMPONEN
-// ============================================================================
-function drawEngineCutaway(ctx, timeSec, segment, kin) {
-  const centerX = WIDTH / 2;
-  const crankCenterY = 1170;
-  const crankRadius = 115; // Jari-jari putaran kruk as
-  const rodLength = 295;   // Panjang stang piston (connecting rod)
-
-  const cylWidth = 290;
-  const cylLeft = centerX - cylWidth / 2;
-  const cylRight = centerX + cylWidth / 2;
-  const cylTop = 530;      // Batas atas ruang bakar (Cylinder Head)
-  const cylBottom = 975;   // Batas bawah dinding silinder
-  const pistonHeight = 115;
-  const pistonWidth = cylWidth - 16;
-
-  // Sudut engkol dalam radian (0 derajat = Titik Mati Atas / TMA)
-  const theta = (kin.crankAngle * Math.PI) / 180;
-  const sinT = Math.sin(theta);
-  const cosT = Math.cos(theta);
-
-  // Posisi pena kruk as (Crankpin)
-  const pinX = centerX + crankRadius * sinT;
-  const pinY = crankCenterY - crankRadius * cosT;
-
-  // Posisi pena piston (Wrist pin) menggunakan rumus kinematika slider-crank murni
-  const dyRod = Math.sqrt(Math.max(1, rodLength * rodLength - Math.pow(crankRadius * sinT, 2)));
-  const wristPinY = pinY - dyRod;
-  const pistonTopY = wristPinY - pistonHeight * 0.45;
-  const pistonBottomY = pistonTopY + pistonHeight;
-
-  // Efek getaran kamera halus saat terjadi ledakan langkah Usaha (Power Stroke)
-  const shakeX = kin.explosionIntensity > 0.3 ? Math.sin(timeSec * 90) * kin.explosionIntensity * 7 : 0;
-  const shakeY = kin.explosionIntensity > 0.3 ? Math.cos(timeSec * 85) * kin.explosionIntensity * 7 : 0;
-
-  ctx.save();
-  ctx.translate(shakeX, shakeY);
-
-  // --------------------------------------------------------------------------
-  // A. SALURAN INTAKE (KIRI) & EXHAUST (KANAN) DI KEPALA SILINDER
-  // --------------------------------------------------------------------------
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = '#2d3f5e';
-
-  // Saluran Masuk (Intake Manifold - Kiri)
-  ctx.fillStyle = 'rgba(0, 195, 255, 0.14)';
-  ctx.beginPath();
-  ctx.moveTo(cylLeft - 140, cylTop - 95);
-  ctx.quadraticCurveTo(cylLeft - 30, cylTop - 95, cylLeft + 30, cylTop);
-  ctx.lineTo(cylLeft + 105, cylTop);
-  ctx.quadraticCurveTo(cylLeft + 65, cylTop - 145, cylLeft - 140, cylTop - 145);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  // Saluran Buang (Exhaust Manifold - Kanan)
-  ctx.fillStyle = 'rgba(255, 107, 74, 0.14)';
-  ctx.beginPath();
-  ctx.moveTo(cylRight + 140, cylTop - 95);
-  ctx.quadraticCurveTo(cylRight + 30, cylTop - 95, cylRight - 30, cylTop);
-  ctx.lineTo(cylRight - 105, cylTop);
-  ctx.quadraticCurveTo(cylRight - 65, cylTop - 145, cylRight + 140, cylTop - 145);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  // --------------------------------------------------------------------------
-  // B. RUANG BAKAR & VFX FLUIDA / PARTIKEL / LEDAKAN API
-  // --------------------------------------------------------------------------
-  const chamberHeight = Math.max(24, pistonTopY - cylTop);
-
-  // Gradien warna di dalam ruang bakar sesuai siklus
-  const chamberGrad = ctx.createLinearGradient(centerX, cylTop, centerX, pistonTopY);
-  if (kin.strokeType === 'intake') {
-    chamberGrad.addColorStop(0, 'rgba(0, 225, 255, 0.55)');
-    chamberGrad.addColorStop(1, 'rgba(0, 140, 255, 0.20)');
-  } else if (kin.strokeType === 'compression') {
-    const compHeat = kin.strokeProgress;
-    chamberGrad.addColorStop(0, `rgba(255, ${Math.round(lerp(200, 90, compHeat))}, 0, ${lerp(0.35, 0.82, compHeat).toFixed(2)})`);
-    chamberGrad.addColorStop(1, `rgba(255, 160, 0, ${lerp(0.2, 0.65, compHeat).toFixed(2)})`);
-  } else if (kin.strokeType === 'power') {
-    const pwr = kin.explosionIntensity;
-    chamberGrad.addColorStop(0, `rgba(255, 255, 210, ${clamp(pwr * 1.1, 0.2, 0.98).toFixed(2)})`);
-    chamberGrad.addColorStop(0.35, `rgba(255, 95, 0, ${clamp(pwr * 0.95, 0.2, 0.9).toFixed(2)})`);
-    chamberGrad.addColorStop(1, `rgba(220, 20, 20, ${clamp(pwr * 0.6, 0.1, 0.7).toFixed(2)})`);
-  } else {
-    // Exhaust (Asap abu-abu hangat)
-    chamberGrad.addColorStop(0, 'rgba(140, 152, 170, 0.55)');
-    chamberGrad.addColorStop(1, 'rgba(75, 85, 102, 0.25)');
-  }
-
-  ctx.fillStyle = chamberGrad;
-  ctx.fillRect(cylLeft + 6, cylTop, cylWidth - 12, chamberHeight);
-
-  // Simulasi Partikel di Dalam Ruang Bakar & Saluran Katup
-  ctx.save();
-  for (let i = 0; i < chamberParticles.length; i++) {
-    const pt = chamberParticles[i];
-    const animPhase = (timeSec * pt.speed + pt.offset) % 1;
-
-    if (kin.strokeType === 'intake') {
-      // Partikel biru muda mengalir masuk dari saluran kiri ke ruang bakar
-      const px = lerp(cylLeft + 25, cylRight - 25, (pt.seedX + animPhase * 0.4) % 1);
-      const py = lerp(cylTop - 30, pistonTopY - 12, animPhase);
-      if (py >= cylTop - 40 && py <= pistonTopY - 8) {
-        ctx.beginPath();
-        ctx.arc(px, py, pt.size, 0, Math.PI * 2);
-        ctx.fillStyle = i % 2 === 0 ? '#00f2fe' : '#70ffdf';
-        ctx.globalAlpha = 0.75;
-        ctx.fill();
-      }
-    } else if (kin.strokeType === 'compression') {
-      // Partikel merapat dan bergetar cepat karena dipadatkan piston
-      const jitter = Math.sin(timeSec * 35 + i) * 5 * kin.strokeProgress;
-      const px = lerp(cylLeft + 22, cylRight - 22, Math.abs(pt.seedX)) + jitter;
-      const py = lerp(cylTop + 14, pistonTopY - 14, Math.abs(pt.seedY));
-      ctx.beginPath();
-      ctx.arc(px, py, pt.size * lerp(1, 0.8, kin.strokeProgress), 0, Math.PI * 2);
-      ctx.fillStyle = kin.strokeProgress > 0.5 ? '#ff9900' : '#00e5ff';
-      ctx.globalAlpha = 0.85;
-      ctx.fill();
-    } else if (kin.strokeType === 'power') {
-      // Bola api & gelombang kejut menyebar ke bawah mendorong piston
-      const px = lerp(cylLeft + 20, cylRight - 20, Math.abs(pt.seedX));
-      const py = lerp(cylTop + 10, pistonTopY - 10, (Math.abs(pt.seedY) + animPhase) % 1);
-      ctx.beginPath();
-      ctx.arc(px, py, pt.size * 1.6, 0, Math.PI * 2);
-      ctx.fillStyle = i % 3 === 0 ? '#ffffff' : i % 2 === 0 ? '#ffbe0b' : '#ff3b30';
-      ctx.globalAlpha = clamp(kin.explosionIntensity * 0.9, 0.25, 0.95);
-      ctx.fill();
-    } else {
-      // Partikel asap gas buang terdorong keluar melalui katup kanan
-      const px = lerp(cylLeft + 30, cylRight + 70, (Math.abs(pt.seedX) + animPhase * 0.6) % 1);
-      const py = lerp(pistonTopY - 12, cylTop - 65, animPhase);
-      if (px <= cylRight - 10 || py < cylTop + 10) {
-        ctx.beginPath();
-        ctx.arc(px, py, pt.size * 1.3, 0, Math.PI * 2);
-        ctx.fillStyle = '#9aa8bc';
-        ctx.globalAlpha = 0.55;
-        ctx.fill();
-      }
-    }
-  }
-  ctx.restore();
-
-  // Gelombang Ledakan Shockwave saat Busi Memercik
-  if (kin.explosionIntensity > 0.15) {
-    ctx.save();
-    const waveR = (1 - kin.explosionIntensity) * 190 + 25;
-    ctx.beginPath();
-    ctx.arc(centerX, cylTop + 28, waveR, 0, Math.PI);
-    ctx.strokeStyle = `rgba(255, 230, 120, ${(kin.explosionIntensity * 0.9).toFixed(2)})`;
-    ctx.lineWidth = 8 * kin.explosionIntensity;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // --------------------------------------------------------------------------
-  // C. DINDING BLOK SILINDER & BAK ENGKOL (CRANKCASE)
-  // --------------------------------------------------------------------------
-  // Rumah Kruk As (Crankcase Bawah)
-  ctx.beginPath();
-  ctx.arc(centerX, crankCenterY, crankRadius + 75, -0.22 * Math.PI, 1.22 * Math.PI);
-  ctx.fillStyle = '#0a1220';
-  ctx.fill();
-  ctx.lineWidth = 16;
-  ctx.strokeStyle = '#334768';
-  ctx.stroke();
-
-  // Sirip Pendingin Blok Silinder (Kiri & Kanan)
-  ctx.fillStyle = '#243552';
-  for (let fy = cylTop + 25; fy < cylBottom - 25; fy += 38) {
-    drawRoundedRect(ctx, cylLeft - 42, fy, 30, 16, 4);
-    ctx.fill();
-    drawRoundedRect(ctx, cylRight + 12, fy, 30, 16, 4);
-    ctx.fill();
-  }
-
-  // Dinding Silinder Utama (Baja)
-  ctx.fillStyle = '#4a6084';
-  drawRoundedRect(ctx, cylLeft - 14, cylTop - 10, 20, cylBottom - cylTop + 25, 6);
-  ctx.fill();
-  drawRoundedRect(ctx, cylRight - 6, cylTop - 10, 20, cylBottom - cylTop + 25, 6);
-  ctx.fill();
-
-  // Kepala Silinder Atas (Cylinder Head)
-  ctx.fillStyle = '#2d4060';
-  drawRoundedRect(ctx, cylLeft - 45, cylTop - 36, cylWidth + 90, 38, 10);
-  ctx.fill();
-
-  // --------------------------------------------------------------------------
-  // D. KATUP MASUK (INTAKE VALVE) & KATUP BUANG (EXHAUST VALVE)
-  // --------------------------------------------------------------------------
-  const intakeX = centerX - 68;
-  const exhaustX = centerX + 68;
-  const intakeShift = kin.intakeValveOpen * 30;
-  const exhaustShift = kin.exhaustValveOpen * 30;
-
-  // Fungsi menggambar 1 unit katup lengkap dengan pegas (valve spring)
-  function drawValveUnit(vx, shift, isOpen, activeColor, isHighlighted) {
-    ctx.save();
-    // Pegas Katup
-    ctx.strokeStyle = isOpen ? activeColor : '#7c90b0';
-    ctx.lineWidth = 3.5;
-    const springTop = cylTop - 115;
-    const springBot = cylTop - 35 + shift * 0.5;
-    for (let s = 0; s < 5; s++) {
-      const sy = lerp(springTop, springBot, s / 5);
-      ctx.beginPath();
-      ctx.moveTo(vx - 14, sy);
-      ctx.lineTo(vx + 14, sy + 6);
-      ctx.stroke();
-    }
-
-    // Batang & Payung Katup
-    ctx.strokeStyle = isHighlighted ? '#00f2fe' : isOpen ? activeColor : '#dce6f7';
-    ctx.fillStyle = ctx.strokeStyle;
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.moveTo(vx, cylTop - 125 + shift);
-    ctx.lineTo(vx, cylTop + 4 + shift);
-    ctx.stroke();
-
-    // Kepala Payung Katup
-    ctx.beginPath();
-    ctx.moveTo(vx - 30, cylTop + 4 + shift);
-    ctx.lineTo(vx + 30, cylTop + 4 + shift);
-    ctx.lineTo(vx + 18, cylTop - 6 + shift);
-    ctx.lineTo(vx - 18, cylTop - 6 + shift);
-    ctx.closePath();
-    ctx.fill();
-
-    // Panah Aliran saat Katup Terbuka
-    if (isOpen > 0.2) {
-      ctx.strokeStyle = activeColor;
-      ctx.lineWidth = 4;
-      const arrowY = cylTop + 32 + (timeSec * 60) % 25;
-      ctx.beginPath();
-      ctx.arc(vx, arrowY, 10, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  drawValveUnit(
-    intakeX,
-    intakeShift,
-    kin.intakeValveOpen > 0.05,
-    '#00f2fe',
-    segment.highlight === 'intake_valve' || segment.highlight === 'components'
-  );
-  drawValveUnit(
-    exhaustX,
-    exhaustShift,
-    kin.exhaustValveOpen > 0.05,
-    '#ff6b4a',
-    segment.highlight === 'exhaust_valve' || segment.highlight === 'components'
+  execSync(
+    `ffmpeg -y -f lavfi -i "aevalsrc='${aevalExpr}':s=44100:d=${TOTAL_DURATION}" -af "lowpass=f=1400,aecho=0.8:0.85:180:0.35,afade=t=in:st=0:d=2.5,afade=t=out:st=87:d=3,volume=0.30" -ar 44100 -ac 2 "${bgmWav}"`,
+    { stdio: "ignore" }
   );
 
-  // --------------------------------------------------------------------------
-  // E. BUSI (SPARK PLUG) & BUSUR PETIR PENGAPIAN
-  // --------------------------------------------------------------------------
-  ctx.save();
-  const sparkHighlight = segment.highlight === 'spark_plug' || segment.highlight === 'components';
-  // Keramik isolator busi
-  ctx.fillStyle = sparkHighlight ? '#fff3b0' : '#f1f5f9';
-  drawRoundedRect(ctx, centerX - 15, cylTop - 135, 30, 75, 6);
-  ctx.fill();
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  // Mix Narasi Utama + Backsound Creepy
+  const masterAudio = path.join(TEMP_DIR, "master_audio.m4a");
+  execSync(
+    `ffmpeg -y -i "${fullVoiceWav}" -i "${bgmWav}" -filter_complex "[0:a]volume=1.25[v];[1:a]volume=0.32[b];[v][b]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[outa]" -map "[outa]" -c:a aac -b:a 192k "${masterAudio}"`,
+    { stdio: "ignore" }
+  );
 
-  // Ulir logam busi
-  ctx.fillStyle = '#94a3b8';
-  drawRoundedRect(ctx, centerX - 19, cylTop - 60, 38, 52, 4);
-  ctx.fill();
-
-  // Elektroda ujung busi di atap ruang bakar
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(centerX, cylTop - 8);
-  ctx.lineTo(centerX, cylTop + 10);
-  ctx.moveTo(centerX + 10, cylTop - 8);
-  ctx.lineTo(centerX + 10, cylTop + 16);
-  ctx.lineTo(centerX - 2, cylTop + 16);
-  ctx.stroke();
-
-  // Efek Kilatan Petir & Cahaya Busi saat Langkah Usaha
-  if (kin.sparkIntensity > 0.05 || segment.highlight === 'spark_plug') {
-    const glowAmt = Math.max(kin.sparkIntensity, segment.highlight === 'spark_plug' ? 0.65 : 0);
-    const sparkGrad = ctx.createRadialGradient(centerX, cylTop + 16, 2, centerX, cylTop + 16, 75 * glowAmt);
-    sparkGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    sparkGrad.addColorStop(0.35, 'rgba(255, 230, 0, 0.85)');
-    sparkGrad.addColorStop(1, 'rgba(255, 80, 0, 0)');
-    ctx.fillStyle = sparkGrad;
-    ctx.beginPath();
-    ctx.arc(centerX, cylTop + 16, 75 * glowAmt, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Cabang-cabang petir elektrik
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3.5;
-    for (let b = 0; b < 4; b++) {
-      const angle = (b / 4) * Math.PI + 0.2;
-      const len = 35 + ((timeSec * 120 + b * 19) % 30);
-      ctx.beginPath();
-      ctx.moveTo(centerX, cylTop + 14);
-      ctx.lineTo(
-        centerX + Math.cos(angle) * (len * 0.5) + Math.sin(timeSec * 80 + b) * 8,
-        cylTop + 14 + Math.sin(angle) * (len * 0.5)
-      );
-      ctx.lineTo(
-        centerX + Math.cos(angle) * len,
-        cylTop + 14 + Math.sin(angle) * len
-      );
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-
-  // --------------------------------------------------------------------------
-  // F. STANG PISTON (CONNECTING ROD)
-  // --------------------------------------------------------------------------
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(centerX - 18, wristPinY);
-  ctx.lineTo(centerX + 18, wristPinY);
-  ctx.lineTo(pinX + 28, pinY);
-  ctx.lineTo(pinX - 28, pinY);
-  ctx.closePath();
-
-  const rodGrad = ctx.createLinearGradient(centerX - 25, wristPinY, pinX + 25, pinY);
-  rodGrad.addColorStop(0, '#94a3b8');
-  rodGrad.addColorStop(0.5, '#e2e8f0');
-  rodGrad.addColorStop(1, '#64748b');
-  ctx.fillStyle = rodGrad;
-  ctx.fill();
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = '#1e293b';
-  ctx.stroke();
-
-  // Tulang tengah I-Beam pada Stang Piston
-  ctx.beginPath();
-  ctx.moveTo(centerX, wristPinY + 22);
-  ctx.lineTo(pinX, pinY - 22);
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = '#475569';
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  ctx.restore();
-
-  // --------------------------------------------------------------------------
-  // G. PISTON & RING KOMPRESI
-  // --------------------------------------------------------------------------
-  ctx.save();
-  const pistonX = centerX - pistonWidth / 2;
-  const pisGrad = ctx.createLinearGradient(pistonX, pistonTopY, pistonX + pistonWidth, pistonTopY);
-  pisGrad.addColorStop(0, '#64748b');
-  pisGrad.addColorStop(0.25, '#cbd5e1');
-  pisGrad.addColorStop(0.5, '#f8fafc');
-  pisGrad.addColorStop(0.75, '#cbd5e1');
-  pisGrad.addColorStop(1, '#475569');
-
-  ctx.fillStyle = pisGrad;
-  drawRoundedRect(ctx, pistonX, pistonTopY, pistonWidth, pistonHeight, 12);
-  ctx.fill();
-  ctx.lineWidth = segment.highlight === 'piston' ? 5 : 3;
-  ctx.strokeStyle = segment.highlight === 'piston' ? '#00f2fe' : '#1e293b';
-  ctx.stroke();
-
-  // 3 Ring Piston (Ring Kompresi 1, Ring Kompresi 2, Ring Oli)
-  const ringColors = ['#fbbf24', '#38bdf8', '#f97316'];
-  for (let r = 0; r < 3; r++) {
-    const ry = pistonTopY + 16 + r * 12;
-    ctx.fillStyle = ringColors[r];
-    ctx.fillRect(pistonX - 3, ry, pistonWidth + 6, 5);
-  }
-
-  // Pena Piston (Wrist Pin / Gudgeon Pin)
-  ctx.beginPath();
-  ctx.arc(centerX, wristPinY, 22, 0, Math.PI * 2);
-  ctx.fillStyle = '#334155';
-  ctx.fill();
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(centerX, wristPinY, 10, 0, Math.PI * 2);
-  ctx.fillStyle = '#0f172a';
-  ctx.fill();
-  ctx.restore();
-
-  // --------------------------------------------------------------------------
-  // H. KRUK AS (CRANKSHAFT) & BANDUL PENYEIMBANG (COUNTERWEIGHT)
-  // --------------------------------------------------------------------------
-  ctx.save();
-  ctx.translate(centerX, crankCenterY);
-  ctx.rotate(theta);
-
-  // Bandul Kruk As (Counterweight Web)
-  ctx.beginPath();
-  ctx.arc(0, 0, 56, -0.25 * Math.PI, 1.25 * Math.PI);
-  ctx.lineTo(-42, -crankRadius - 18);
-  ctx.arc(0, -crankRadius, 42, Math.PI, 0, false);
-  ctx.closePath();
-
-  const crankGrad = ctx.createRadialGradient(0, -30, 10, 0, 0, 140);
-  crankGrad.addColorStop(0, '#e2e8f0');
-  crankGrad.addColorStop(0.6, '#94a3b8');
-  crankGrad.addColorStop(1, '#334155');
-  ctx.fillStyle = crankGrad;
-  ctx.fill();
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = '#0f172a';
-  ctx.stroke();
-
-  // Poros Utama Kruk As (Main Journal)
-  ctx.beginPath();
-  ctx.arc(0, 0, 26, 0, Math.PI * 2);
-  ctx.fillStyle = '#1e293b';
-  ctx.fill();
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = '#38bdf8';
-  ctx.stroke();
-
-  // Pena Engkol (Crankpin Journal)
-  ctx.beginPath();
-  ctx.arc(0, -crankRadius, 22, 0, Math.PI * 2);
-  ctx.fillStyle = '#0f172a';
-  ctx.fill();
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = '#fbbf24';
-  ctx.stroke();
-  ctx.restore();
-
-  // Panah Indikator Arah Putaran Kruk As
-  ctx.save();
-  ctx.strokeStyle = 'rgba(0, 242, 254, 0.55)';
-  ctx.lineWidth = 4;
-  ctx.setLineDash([10, 8]);
-  ctx.beginPath();
-  ctx.arc(centerX, crankCenterY, crankRadius + 46, -0.75 * Math.PI, -0.25 * Math.PI);
-  ctx.stroke();
-  ctx.restore();
-
-  // --------------------------------------------------------------------------
-  // I. GARIS CALLOUT PENUNJUK KOMPONEN AKTIF (DINAMIS & JELAS)
-  // --------------------------------------------------------------------------
-  const calloutList = [
-    {
-      id: 'spark_plug',
-      label: 'BUSI (SPARK PLUG)',
-      desc: 'Pemantik Bunga Api',
-      targetX: centerX,
-      targetY: cylTop - 95,
-      boxX: 55,
-      boxY: 420,
-      color: '#fbbf24'
-    },
-    {
-      id: 'intake_valve',
-      label: 'KATUP MASUK',
-      desc: 'Udara + BBM Masuk',
-      targetX: intakeX,
-      targetY: cylTop - 10,
-      boxX: 55,
-      boxY: 575,
-      color: '#00f2fe'
-    },
-    {
-      id: 'exhaust_valve',
-      label: 'KATUP BUANG',
-      desc: 'Jalur Gas Sisa Keluar',
-      targetX: exhaustX,
-      targetY: cylTop - 10,
-      boxX: 740,
-      boxY: 575,
-      color: '#ff6b4a'
-    },
-    {
-      id: 'piston',
-      label: 'PISTON & RING',
-      desc: 'Kompresi & Terima Ledakan',
-      targetX: centerX - pistonWidth / 2 + 10,
-      targetY: pistonTopY + 45,
-      boxX: 55,
-      boxY: 790,
-      color: '#38bdf8'
-    },
-    {
-      id: 'crankshaft',
-      label: 'STANG & KRUK AS',
-      desc: 'Ubah Gerak Turun Jadi Putaran',
-      targetX: pinX,
-      targetY: pinY,
-      boxX: 740,
-      boxY: 1090,
-      color: '#a855f7'
-    }
-  ];
-
-  calloutList.forEach((item, idx) => {
-    // Tampilkan semua callout saat segmen "components" atau fokus pada komponen langkah terkait
-    const isFocused =
-      segment.highlight === 'components' ||
-      segment.highlight === 'all' ||
-      segment.highlight === item.id ||
-      (segment.phase === 'exhaust' && item.id === 'crankshaft');
-
-    const alpha = isFocused ? 1.0 : 0.28;
-    const pulse = isFocused ? Math.sin(timeSec * 6 + idx) * 3 : 0;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-
-    const boxW = 285;
-    const boxH = 86;
-    const anchorX = item.boxX < centerX ? item.boxX + boxW : item.boxX;
-    const anchorY = item.boxY + boxH / 2;
-
-    // Garis penghubung ke komponen mesin
-    ctx.strokeStyle = item.color;
-    ctx.lineWidth = isFocused ? 3.5 : 2;
-    ctx.beginPath();
-    ctx.moveTo(anchorX, anchorY);
-    ctx.lineTo((anchorX + item.targetX) / 2, anchorY);
-    ctx.lineTo(item.targetX, item.targetY);
-    ctx.stroke();
-
-    // Titik target pada komponen
-    ctx.beginPath();
-    ctx.arc(item.targetX, item.targetY, 7 + (isFocused ? 2 : 0), 0, Math.PI * 2);
-    ctx.fillStyle = item.color;
-    ctx.fill();
-
-    // Kotak Label Callout
-    ctx.fillStyle = 'rgba(9, 18, 36, 0.92)';
-    drawRoundedRect(ctx, item.boxX, item.boxY + pulse, boxW, boxH, 14);
-    ctx.fill();
-    ctx.lineWidth = isFocused ? 3 : 1.5;
-    ctx.strokeStyle = item.color;
-    ctx.stroke();
-
-    // Teks Callout Singkat (Bukan Narasi Penuh)
-    ctx.fillStyle = item.color;
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(item.label, item.boxX + 18, item.boxY + 34 + pulse);
-
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '19px sans-serif';
-    ctx.fillText(item.desc, item.boxX + 18, item.boxY + 64 + pulse);
-
-    ctx.restore();
-  });
-
-  ctx.restore();
+  return masterAudio;
 }
 
 // ============================================================================
-// 8. HUD ATAS, INDIKATOR 4 LANGKAH, & KARTU KOMPONEN BAWAH
-// ============================================================================
-function drawTopHeaderAndGauges(ctx, timeSec, segment, kin) {
-  const segElapsed = timeSec - segment.start;
-  const popScale = easeOutBack(clamp(segElapsed / 0.45, 0, 1));
-
-  // 1. Badge Fase di Atas
-  ctx.save();
-  ctx.translate(WIDTH / 2, 115);
-  ctx.scale(popScale, popScale);
-
-  const badgeW = 390;
-  const badgeH = 54;
-  ctx.fillStyle = 'rgba(0, 242, 254, 0.16)';
-  drawRoundedRect(ctx, -badgeW / 2, -badgeH / 2, badgeW, badgeH, 27);
-  ctx.fill();
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = '#00f2fe';
-  ctx.stroke();
-
-  ctx.fillStyle = '#00f2fe';
-  ctx.font = 'bold 24px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(segment.badge, 0, 0);
-  ctx.restore();
-
-  // 2. Judul Utama & Subjudul Ringkas (Tidak menumpuk teks narasi di layar)
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 58px sans-serif';
-  ctx.fillText(segment.title, WIDTH / 2, 215);
-
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '28px sans-serif';
-  ctx.fillText(segment.subtitle, WIDTH / 2, 268);
-  ctx.restore();
-
-  // 3. Bar Indikator 4-Tak Interaktif (1. HISAP | 2. KOMPRESI | 3. USAHA | 4. BUANG)
-  const steps = [
-    { key: 'intake', label: '1. HISAP', color: '#00f2fe' },
-    { key: 'compression', label: '2. KOMPRESI', color: '#fbbf24' },
-    { key: 'power', label: '3. USAHA', color: '#ff3b30' },
-    { key: 'exhaust', label: '4. BUANG', color: '#a855f7' }
-  ];
-
-  const pillW = 225;
-  const pillH = 58;
-  const gap = 18;
-  const totalRowW = steps.length * pillW + (steps.length - 1) * gap;
-  const startX = (WIDTH - totalRowW) / 2;
-  const pillY = 310;
-
-  steps.forEach((st, i) => {
-    const px = startX + i * (pillW + gap);
-    const isActive = kin.strokeType === st.key;
-
-    ctx.save();
-    ctx.fillStyle = isActive ? st.color : 'rgba(15, 28, 52, 0.85)';
-    drawRoundedRect(ctx, px, pillY, pillW, pillH, 14);
-    ctx.fill();
-
-    ctx.lineWidth = isActive ? 3.5 : 2;
-    ctx.strokeStyle = isActive ? '#ffffff' : 'rgba(148, 163, 184, 0.35)';
-    ctx.stroke();
-
-    ctx.fillStyle = isActive ? '#060b16' : '#cbd5e1';
-    ctx.font = 'bold 23px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(st.label, px + pillW / 2, pillY + pillH / 2);
-    ctx.restore();
-  });
-}
-
-function drawBottomDashboard(ctx, timeSec, segment, kin) {
-  // Panel Kartu Fokus Komponen di Bawah Mesin
-  const cardX = 65;
-  const cardY = 1435;
-  const cardW = WIDTH - 130;
-  const cardH = 310;
-
-  let accent = '#00f2fe';
-  if (kin.strokeType === 'compression') accent = '#fbbf24';
-  if (kin.strokeType === 'power') accent = '#ff3b30';
-  if (kin.strokeType === 'exhaust') accent = '#a855f7';
-
-  ctx.save();
-  ctx.fillStyle = 'rgba(8, 17, 34, 0.92)';
-  drawRoundedRect(ctx, cardX, cardY, cardW, cardH, 26);
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = accent;
-  ctx.stroke();
-
-  // Ikon Komponen Dinamis di Sisi Kiri Kartu
-  drawComponentIcon(ctx, segment.highlight, cardX + 105, cardY + 115, 62, accent, timeSec);
-
-  // Informasi Teknis Singkat & Padat (Visual Poin, Bukan Teks Narasi Panjang)
-  const infoMap = {
-    intro: {
-      head: 'PRINSIP KERJA KONVERSI ENERGI',
-      line1: '• Energi Kimia Bensin -> Energi Panas -> Gerak Mekanik',
-      line2: '• Menggunakan Siklus 4-Langkah (Four-Stroke Cycle)'
-    },
-    components: {
-      head: 'SINERGI KOMPONEN MESIN',
-      line1: '• Piston & Stang menahan tekanan ledakan tinggi',
-      line2: '• Kruk As mengubah gerak naik-turun menjadi torsi putar'
-    },
-    intake: {
-      head: 'FASE 1: INTAKE (HISAP)',
-      line1: '• Katup Masuk Terbuka | Katup Buang Tertutup',
-      line2: '• Piston bergerak turun (TMA -> TMB) menghisap BBM + Udara'
-    },
-    compression: {
-      head: 'FASE 2: COMPRESSION (KOMPRESI)',
-      line1: '• Kedua Katup Menutup Rapat (Ruang Bakar Kedap)',
-      line2: '• Piston naik (TMB -> TMA) memampatkan gas agar mudah meledak'
-    },
-    power: {
-      head: 'FASE 3: POWER (USAHA / PEMBAKARAN)',
-      line1: '• Busi memercikkan api tepat di Titik Mati Atas (TMA)',
-      line2: '• Ledakan mendorong Piston turun keras memutar Kruk As'
-    },
-    exhaust: {
-      head: 'FASE 4: EXHAUST (BUANG)',
-      line1: '• Katup Buang Terbuka | Piston naik mendorong sisa gas',
-      line2: '• Siklus berulang ribuan RPM menghasilkan tenaga ke roda'
-    }
-  };
-
-  const activeInfo = infoMap[segment.phase] || infoMap.intro;
-
-  ctx.textAlign = 'left';
-  ctx.fillStyle = accent;
-  ctx.font = 'bold 31px sans-serif';
-  ctx.fillText(activeInfo.head, cardX + 195, cardY + 78);
-
-  ctx.fillStyle = '#f1f5f9';
-  ctx.font = '25px sans-serif';
-  ctx.fillText(activeInfo.line1, cardX + 195, cardY + 128);
-
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = '25px sans-serif';
-  ctx.fillText(activeInfo.line2, cardX + 195, cardY + 172);
-
-  // Bar Metrik Real-time (RPM, Suhu Ruang Bakar, Sudut Kruk As)
-  const metricY = cardY + 215;
-  const metrics = [
-    { label: 'PUTARAN MESIN', val: `${kin.rpmValue} RPM` },
-    {
-      label: 'SUHU RUANG BAKAR',
-      val:
-        kin.strokeType === 'power'
-          ? '2.100 °C'
-          : kin.strokeType === 'compression'
-          ? '480 °C'
-          : kin.strokeType === 'exhaust'
-          ? '850 °C'
-          : '95 °C'
-    },
-    { label: 'SUDUT KRUK AS', val: `${Math.round(kin.crankAngle)}° / 720°` }
-  ];
-
-  const mBoxW = 280;
-  metrics.forEach((m, idx) => {
-    const mx = cardX + 35 + idx * (mBoxW + 22);
-    ctx.fillStyle = 'rgba(20, 36, 66, 0.85)';
-    drawRoundedRect(ctx, mx, metricY, mBoxW, 72, 12);
-    ctx.fill();
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 17px sans-serif';
-    ctx.fillText(m.label, mx + 18, metricY + 27);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 25px sans-serif';
-    ctx.fillText(m.val, mx + 18, metricY + 56);
-  });
-
-  ctx.restore();
-
-  // Progress Bar Durasi Video 40 Detik di Bagian Paling Bawah
-  const barX = 65;
-  const barY = 1805;
-  const barW = WIDTH - 130;
-  const barH = 18;
-  const progress = clamp(timeSec / DURATION, 0, 1);
-
-  ctx.save();
-  ctx.fillStyle = 'rgba(30, 41, 59, 0.9)';
-  drawRoundedRect(ctx, barX, barY, barW, barH, 9);
-  ctx.fill();
-
-  const progGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
-  progGrad.addColorStop(0, '#00f2fe');
-  progGrad.addColorStop(0.5, '#fbbf24');
-  progGrad.addColorStop(1, '#ff3b30');
-  ctx.fillStyle = progGrad;
-  drawRoundedRect(ctx, barX, barY, Math.max(18, barW * progress), barH, 9);
-  ctx.fill();
-
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = 'bold 22px sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText(`TIMELINE EDUKASI • ${timeSec.toFixed(1)}s / ${DURATION}.0s`, barX + barW, barY + 50);
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#00f2fe';
-  ctx.fillText('ANIMASI MEKANIK 4-TAK', barX, barY + 50);
-  ctx.restore();
-}
-
-// ============================================================================
-// 9. PIPELINE UTAMA RENDER FRAME KE FFMPEG -> ./output.mp4
+// PIPELINE RENDER UTAMA (KANVAS -> FFMPEG -> ./output.mp4)
 // ============================================================================
 async function main() {
-  const tempDir = path.join(__dirname, '.tmp_engine_render');
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
+  const masterAudioPath = await buildMasterAudio();
+
+  console.log(
+    `[3/3] Merender ${TOTAL_FRAMES} frame animasi (${WIDTH}x${HEIGHT} @ ${FPS}fps - 90 detik)...`
+  );
+
+  const canvas = createCanvas(WIDTH, HEIGHT);
+  const ctx = canvas.getContext("2d");
+
+  const ffmpegArgs = [
+    "-y",
+    "-f",
+    "rawvideo",
+    "-vcodec",
+    "rawvideo",
+    "-pix_fmt",
+    "rgba",
+    "-s",
+    `${WIDTH}x${HEIGHT}`,
+    "-r",
+    String(FPS),
+    "-i",
+    "-",
+    "-i",
+    masterAudioPath,
+    "-map",
+    "0:v:0",
+    "-map",
+    "1:a:0",
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "20",
+    "-c:a",
+    "copy",
+    "-shortest",
+    OUTPUT_FILE
+  ];
+
+  const ffmpegProc = spawn("ffmpeg", ffmpegArgs, {
+    stdio: ["pipe", "ignore", "pipe"]
+  });
+
+  let ffmpegErr = "";
+  ffmpegProc.stderr.on("data", (chunk) => {
+    ffmpegErr += chunk.toString();
+  });
+
+  for (let frame = 0; frame < TOTAL_FRAMES; frame++) {
+    const currentTime = frame / FPS;
+    renderFrame(ctx, currentTime);
+
+    const rawBuffer = canvas.data();
+    const canContinue = ffmpegProc.stdin.write(rawBuffer);
+    if (!canContinue) {
+      await new Promise((resolve) => ffmpegProc.stdin.once("drain", resolve));
+    }
+
+    if (frame % (FPS * 10) === 0 || frame === TOTAL_FRAMES - 1) {
+      const pct = Math.round(((frame + 1) / TOTAL_FRAMES) * 100);
+      console.log(`Progress Render: ${pct}% (${frame + 1}/${TOTAL_FRAMES} frame)`);
+    }
   }
 
+  ffmpegProc.stdin.end();
+
+  await new Promise((resolve, reject) => {
+    ffmpegProc.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`FFmpeg keluar dengan kode ${code}:\n${ffmpegErr}`));
+    });
+  });
+
+  // Bersihkan file sementara
   try {
-    // 1. Buat & sinkronkan audio narasi 40 detik penuh
-    const masterAudioPath = await buildMasterAudio(tempDir);
+    fs.rmSync(TEMP_DIR, { recursive: true, force: true });
+  } catch (e) {}
 
-    // 2. Siapkan Canvas @napi-rs/canvas
-    const canvas = createCanvas(WIDTH, HEIGHT);
-    const ctx = canvas.getContext('2d');
-
-    console.log(`[RENDER] Memulai proses rendering ${TOTAL_FRAMES} frame (${WIDTH}x${HEIGHT} @ ${FPS}fps)...`);
-
-    // 3. Jalankan proses FFmpeg untuk menerima raw RGBA buffer dari canvas.data()
-    const outputMp4 = path.resolve(__dirname, 'output.mp4');
-    const ffmpegProc = spawn('ffmpeg', [
-      '-y',
-      '-f', 'rawvideo',
-      '-vcodec', 'rawvideo',
-      '-pix_fmt', 'rgba',
-      '-s', `${WIDTH}x${HEIGHT}`,
-      '-r', String(FPS),
-      '-i', '-',
-      '-i', masterAudioPath,
-      '-map', '0:v:0',
-      '-map', '1:a:0',
-      '-c:v', 'libx264',
-      '-preset', 'ultrafast',
-      '-crf', '20',
-      '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac',
-      '-b:a', '192k',
-      '-shortest',
-      outputMp4
-    ]);
-
-    let ffmpegErrorLog = '';
-    ffmpegProc.stderr.on('data', (chunk) => {
-      ffmpegErrorLog += chunk.toString();
-    });
-
-    // 4. Loop setiap frame (0 s.d. 1199)
-    for (let frame = 0; frame < TOTAL_FRAMES; frame++) {
-      const timeSec = frame / FPS;
-
-      // Cari segmen aktif saat ini
-      const activeSegment =
-        SEGMENTS.find((s) => timeSec >= s.start && timeSec < s.end) ||
-        SEGMENTS[SEGMENTS.length - 1];
-
-      // Hitung kinematika mesin & VFX pada frame ini
-      const kin = getEngineKinematics(timeSec, activeSegment);
-
-      // Gambar seluruh lapisan visual
-      drawBackgroundGridAndVFX(ctx, timeSec, kin);
-      drawTopHeaderAndGauges(ctx, timeSec, activeSegment, kin);
-      drawEngineCutaway(ctx, timeSec, activeSegment, kin);
-      drawBottomDashboard(ctx, timeSec, activeSegment, kin);
-
-      // Ambil raw buffer RGBA langsung dari @napi-rs/canvas
-      const rawBuffer = canvas.data();
-
-      const canContinue = ffmpegProc.stdin.write(rawBuffer);
-      if (!canContinue) {
-        await new Promise((resolve) => ffmpegProc.stdin.once('drain', resolve));
-      }
-
-      if ((frame + 1) % (FPS * 5) === 0 || frame === TOTAL_FRAMES - 1) {
-        const pct = Math.round(((frame + 1) / TOTAL_FRAMES) * 100);
-        console.log(`[RENDER] Progress: ${pct}% (${frame + 1}/${TOTAL_FRAMES} frames)`);
-      }
-    }
-
-    ffmpegProc.stdin.end();
-
-    await new Promise((resolve, reject) => {
-      ffmpegProc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`FFmpeg keluar dengan kode ${code}: ${ffmpegErrorLog}`));
-      });
-      ffmpegProc.on('error', reject);
-    });
-
-    console.log(`[SUKSES] Video selesai dirender ke: ${outputMp4}`);
-  } finally {
-    // Bersihkan direktori sementara
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch (e) {
-      // Abaikan jika gagal hapus tmp
-    }
-  }
+  console.log(`Selesai! Video tersimpan di: ${OUTPUT_FILE}`);
 }
 
 main().catch((err) => {
-  console.error('[ERROR] Gagal menjalankan render.js:', err);
+  console.error("Gagal merender video:", err);
   process.exit(1);
 });
-```

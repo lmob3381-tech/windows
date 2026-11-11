@@ -230,7 +230,7 @@ jobs:
                   voice_settings: { stability: 0.55, similarity_boost: 0.8 }
                 });
                 execSync(
-                  `curl -s -f -X POST "[https://api.elevenlabs.io/v1/text-to-speech/$](https://api.elevenlabs.io/v1/text-to-speech/$){voiceId}" ` +
+                  `curl -s -f -X POST "https://api.elevenlabs.io/v1/text-to-speech/${voiceId}" ` +
                   `-H "xi-api-key: ${process.env.ELEVENLABS_API_KEY}" ` +
                   `-H "Content-Type: application/json" ` +
                   `-d '${payload.replace(/'/g, "'\\''")}' -o "${outputMp3Path}"`,
@@ -286,9 +286,9 @@ jobs:
                 options = {};
               }
               const urlStr = typeof url === 'string' ? url : (url && url.href ? url.href : '');
-              if (urlStr.includes('[translate.google.com/translate_tts](https://translate.google.com/translate_tts)') || urlStr.includes('tts://')) {
+              if (urlStr.includes('https://translate.google.com/translate_tts') || urlStr.includes('tts://')) {
                 try {
-                  const parsed = new URL(urlStr.replace('tts://', '[https://tts.local/](https://tts.local/)?'));
+                  const parsed = new URL(urlStr.replace('tts://', 'https://tts.local/?'));
                   const text = parsed.searchParams.get('q') || parsed.searchParams.get('text') || 'Narasi video';
                   const modelParam = parsed.searchParams.get('model') || parsed.searchParams.get('voice') || process.env.DEFAULT_VOICE_MODEL;
                   const tmpMp3 = `/tmp/studio_tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;

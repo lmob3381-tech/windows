@@ -49,20 +49,27 @@ jobs:
 
       - name: Install System Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          # Bypass mirror azure.archive.ubuntu.com yang sering timeout/Ign di GitHub Runner Ubuntu 24.04
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf "http://archive.ubuntu.com/ubuntu/\nhttp://security.ubuntu.com/ubuntu/\n" | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          fi
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout="10" -o Acquire::https::Timeout="10" update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout="10" install -y --no-install-recommends \
             ffmpeg xvfb \
             build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
             libxi-dev libglu1-mesa-dev libglew-dev pkg-config \
             libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
             libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm-dev \
-            fonts-liberation fonts-noto fonts-noto-color-emoji
+            fonts-liberation fonts-noto-core fonts-noto-color-emoji
 
       - name: Install Neural Voice Engine (Only When Needed by render.js)
         if: steps.detect-voice.outputs.needs_voice == 'true'
         run: |
           echo "🎙️ Mengaktifkan Engine Suara Neural karena render.js membutuhkan narasi..."
-          sudo apt-get install -y espeak-ng python3-pip python3-setuptools
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout="10" install -y --no-install-recommends espeak-ng python3-pip python3-setuptools
           pip3 install edge-tts gTTS --break-system-packages || pip3 install edge-tts gTTS || true
 
       - name: Cache Node Modules
@@ -127,7 +134,7 @@ jobs:
         run: |
           cat << 'PRELOAD_EOF' > preload_fix.js
           const child_process = require('child_process');
-          const { execSync } = child_process;
+          const { execFileSync } = child_process;
           const https = require('https');
           const fs = require('fs');
 
@@ -218,7 +225,7 @@ jobs:
           function synthesizeStudioVoice(text, outputMp3Path, requestedModelKey) {
             const activeKey = requestedModelKey || process.env.VOICE_MODEL || process.env.DEFAULT_VOICE_MODEL || 'id_andrew_studio';
             const cfg = VOICE_STOCK_MODELS[activeKey] || VOICE_STOCK_MODELS['id_andrew_studio'];
-            const rawMp3 = `/tmp/raw_tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;
+            const rawMp3 = '/tmp/raw_tts_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.mp3';
             let success = false;
 
             if (process.env.ELEVENLABS_API_KEY) {
@@ -229,13 +236,14 @@ jobs:
                   model_id: 'eleven_multilingual_v2',
                   voice_settings: { stability: 0.55, similarity_boost: 0.8 }
                 });
-                execSync(
-                  `curl -s -f -X POST "https://api.elevenlabs.io/v1/text-to-speech/${voiceId}" ` +
-                  `-H "xi-api-key: ${process.env.ELEVENLABS_API_KEY}" ` +
-                  `-H "Content-Type: application/json" ` +
-                  `-d '${payload.replace(/'/g, "'\\''")}' -o "${outputMp3Path}"`,
-                  { stdio: 'ignore' }
-                );
+                execFileSync('curl', [
+                  '-s', '-f', '-X', 'POST',
+                  'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId,
+                  '-H', 'xi-api-key: ' + process.env.ELEVENLABS_API_KEY,
+                  '-H', 'Content-Type: application/json',
+                  '-d', payload,
+                  '-o', outputMp3Path
+                ], { stdio: 'ignore' });
                 if (fs.existsSync(outputMp3Path) && fs.statSync(outputMp3Path).size > 500) {
                   return outputMp3Path;
                 }
@@ -245,16 +253,21 @@ jobs:
             const candidates = [cfg, VOICE_STOCK_MODELS['id_ardi_pro'], VOICE_STOCK_MODELS['id_gadis_natural']];
             for (const cand of candidates) {
               try {
-                execSync(
-                  `edge-tts --voice "${cand.voice}" --pitch="${cand.pitch}" --rate="${cand.rate}" --text ${JSON.stringify(text)} --write-media "${rawMp3}"`,
-                  { stdio: 'ignore', timeout: 20000 }
-                );
+                execFileSync('edge-tts', [
+                  '--voice', cand.voice,
+                  '--pitch=' + cand.pitch,
+                  '--rate=' + cand.rate,
+                  '--text', String(text),
+                  '--write-media', rawMp3
+                ], { stdio: 'ignore', timeout: 20000 });
                 if (fs.existsSync(rawMp3) && fs.statSync(rawMp3).size > 200) {
                   const af = AUDIO_MASTERING_FILTERS[cand.preset] || AUDIO_MASTERING_FILTERS.studio_warm;
-                  execSync(
-                    `ffmpeg -y -i "${rawMp3}" -af "${af}" -ar 44100 -ac 2 -b:a 192k "${outputMp3Path}"`,
-                    { stdio: 'ignore' }
-                  );
+                  execFileSync('ffmpeg', [
+                    '-y', '-i', rawMp3,
+                    '-af', af,
+                    '-ar', '44100', '-ac', '2', '-b:a', '192k',
+                    outputMp3Path
+                  ], { stdio: 'ignore' });
                   fs.unlinkSync(rawMp3);
                   success = true;
                   break;
@@ -264,13 +277,22 @@ jobs:
 
             if (!success) {
               try {
-                execSync(`gtts-cli -l id ${JSON.stringify(text)} --output "${rawMp3}"`, { stdio: 'ignore' });
+                execFileSync('gtts-cli', ['-l', 'id', String(text), '--output', rawMp3], { stdio: 'ignore' });
                 const af = AUDIO_MASTERING_FILTERS.studio_warm;
-                execSync(`ffmpeg -y -i "${rawMp3}" -af "atempo=1.15,${af}" -ar 44100 -ac 2 -b:a 192k "${outputMp3Path}"`, { stdio: 'ignore' });
+                execFileSync('ffmpeg', [
+                  '-y', '-i', rawMp3,
+                  '-af', 'atempo=1.15,' + af,
+                  '-ar', '44100', '-ac', '2', '-b:a', '192k',
+                  outputMp3Path
+                ], { stdio: 'ignore' });
                 if (fs.existsSync(rawMp3)) fs.unlinkSync(rawMp3);
                 success = true;
               } catch (e2) {
-                execSync(`ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 3 -q:a 9 -acodec libmp3lame "${outputMp3Path}"`, { stdio: 'ignore' });
+                execFileSync('ffmpeg', [
+                  '-y', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+                  '-t', '3', '-q:a', '9', '-acodec', 'libmp3lame',
+                  outputMp3Path
+                ], { stdio: 'ignore' });
               }
             }
             return outputMp3Path;
@@ -291,7 +313,7 @@ jobs:
                   const parsed = new URL(urlStr.replace('tts://', 'https://tts.local/?'));
                   const text = parsed.searchParams.get('q') || parsed.searchParams.get('text') || 'Narasi video';
                   const modelParam = parsed.searchParams.get('model') || parsed.searchParams.get('voice') || process.env.DEFAULT_VOICE_MODEL;
-                  const tmpMp3 = `/tmp/studio_tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;
+                  const tmpMp3 = '/tmp/studio_tts_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.mp3';
 
                   synthesizeStudioVoice(text, tmpMp3, modelParam);
 

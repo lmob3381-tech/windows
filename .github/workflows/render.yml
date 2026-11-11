@@ -91,14 +91,30 @@ jobs:
 
       - name: Auto-Detect & Install Extra Requirements from render.js
         run: |
-          [ -f "package.json" ] || npm init -y
+          if [ ! -f "package.json" ]; then
+            npm init -y
+          fi
           if [ -f "render.js" ]; then
-            EXTRAS=$(grep -oE "require\(['\"]([^'\"]+)['\"]\)|from ['\"]([^'\"]+)['\"]" render.js \
-              | sed -E "s/require\(['\"]\vert{}['\"]\)|from ['\"]|['\"]//g" \
-              | cut -d'/' -f1,2 \
-              | grep -vE "^\.|^fs$\vert{}^path$|^child_process$\vert{}^os$|^util$\vert{}^stream$|^crypto$\vert{}^http$|^https$\vert{}^url$|^events$\vert{}^buffer$" \
-              | sort -u || true)
-            for pkg in $EXTRAS; then
+            EXTRAS=$(node -e '
+              const fs = require("fs");
+              const builtin = require("module").builtinModules;
+              const code = fs.readFileSync("render.js", "utf8");
+              const pkgs = new Set();
+              const re = /(?:require\s*\(\s*|from\s+)["\x27]([^"\x27]+)["\x27]/g;
+              let m;
+              while ((m = re.exec(code)) !== null) {
+                const p = m[1];
+                if (!p.startsWith(".") && !p.startsWith("/")) {
+                  const parts = p.split("/");
+                  const name = p.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+                  if (!builtin.includes(name) && !builtin.includes(name.replace(/^node:/, ""))) {
+                    pkgs.add(name);
+                  }
+                }
+              }
+              console.log(Array.from(pkgs).join(" "));
+            ' || true)
+            for pkg in $EXTRAS; do
               if [ ! -d "node_modules/$pkg" ]; then
                 npm install "$pkg" --legacy-peer-deps || true
               fi
@@ -292,47 +308,59 @@ jobs:
             sed -i 's/atempo=1.18/atempo=1.02/g' render.js || true
           fi
 
-          # Auto-Fix SyntaxError (seperti backtick/kutip tidak tertutup sebelum rgba) pada render.js
+          # Auto-Fix SyntaxError pada render.js sebelum dijalankan
           if [ -f "render.js" ]; then
             node -e '
               const fs = require("fs");
               const vm = require("vm");
-              let code = fs.readFileSync("render.js", "utf8").replace(/^\s*```[a-zA-Z]*\s*$/gm, "");
-              const countBt = (s) => { let c = 0; for (let i = 0; i < s.length; i++) { if (s[i] === "\\") { i++; continue; } if (s[i] === "`") c++; } return c; };
-              const fixLine = (line) => {
-                if (line.includes("``")) { const f = line.replace(/``+/g, "`"); if (countBt(f) % 2 === 0) return f; }
-                if (line.includes("${")) {
-                  let f = line.replace(/`([^`]*\$\{[^`]*?)["\x27](\s*[;,)\]]*\s*(?:\/\/.*)?)$/, "`$1`$2").replace(/["\x27]([^"\x27]*\$\{[^"\x27]*?)`/g, "`$1`");
-                  if (countBt(f) % 2 === 0) return f;
-                  f = f.replace(/(`[^`]*\$\{[^`]*?)(\s*;?\s*(?:\/\/.*)?)$/, "$1`$2");
-                  if (countBt(f) % 2 === 0) return f;
-                }
-                let fq = line.replace(/(["\x27])([^"\x27`]*?)`/g, "$1$2$1").replace(/`([^"\x27`]*?)(["\x27])/g, "$2$1$2");
-                if (countBt(fq) % 2 === 0 && fq !== line) return fq;
-                return line.replace(/`/g, "");
+              let raw = fs.readFileSync("render.js", "utf8").replace(/\r\n/g, "\n").replace(/^\s*```[a-zA-Z]*\s*$/gm, "");
+              const lines = raw.split("\n");
+              const tryFixLine = (line) => {
+                const cands = [
+                  line.replace(/``+/g, "`"),
+                  line.replace(/`([^`]*\$\{[^`]*?)["\x27](\s*[;,)\]]*\s*(?:\/\/.*)?)$/, "`$1`$2"),
+                  line.replace(/["\x27]([^"\x27]*\$\{[^"\x27]*?)`/g, "`$1`"),
+                  line.replace(/(`[^`]*\$\{[^`]*?)(\s*[;,)\]]*\s*(?:\/\/.*)?)$/, "$1`$2"),
+                  line.replace(/(["\x27])([^"\x27`]*?)`/g, "$1$2$1"),
+                  line.replace(/`([^"\x27`]*?)(["\x27])/g, "$2$1$2"),
+                  line + "`",
+                  line + "\"",
+                  line + "\x27"
+                ];
+                return cands;
               };
-              for (let a = 0; a < 25; a++) {
-                try { new vm.Script(code, { filename: "render.js" }); break; } catch (e) {
+              for (let pass = 0; pass < 15; pass++) {
+                try { new vm.Script(lines.join("\n"), { filename: "render.js" }); break; } catch (e) {
                   const m = ((e && e.stack) || "").match(/render\.js:(\d+)/);
                   if (!m) break;
-                  const idx = parseInt(m[1], 10) - 1, lines = code.split("\n");
-                  let mod = false;
-                  if (idx >= 0 && idx < lines.length && countBt(lines[idx]) % 2 === 1) {
-                    const b = lines[idx]; lines[idx] = fixLine(b); if (lines[idx] !== b) mod = true;
-                  }
-                  if (!mod) {
-                    for (let i = idx - 1; i >= 0; i--) {
-                      if (countBt(lines[i]) % 2 === 1) {
-                        const b = lines[i]; lines[i] = fixLine(b);
-                        if (lines[i] !== b) { console.log("[Auto-Fix] Memperbaiki backtick/kutip tidak tertutup pada baris " + (i + 1)); mod = true; break; }
+                  const errLine = parseInt(m[1], 10) - 1;
+                  let fixed = false;
+                  for (let i = errLine; i >= Math.max(0, errLine - 40); i--) {
+                    const orig = lines[i];
+                    for (const cand of tryFixLine(orig)) {
+                      if (cand === orig) continue;
+                      lines[i] = cand;
+                      try {
+                        new vm.Script(lines.join("\n"), { filename: "render.js" });
+                        console.log("[Auto-Fix] Memperbaiki syntax render.js pada baris " + (i + 1));
+                        fixed = true;
+                        break;
+                      } catch (e2) {
+                        const m2 = ((e2 && e2.stack) || "").match(/render\.js:(\d+)/);
+                        if (m2 && parseInt(m2[1], 10) - 1 > errLine) {
+                          console.log("[Auto-Fix] Memperbaiki syntax render.js pada baris " + (i + 1));
+                          fixed = true;
+                          break;
+                        }
                       }
                     }
+                    if (fixed) break;
+                    lines[i] = orig;
                   }
-                  if (!mod) break;
-                  code = lines.join("\n");
+                  if (!fixed) break;
                 }
               }
-              fs.writeFileSync("render.js", code, "utf8");
+              fs.writeFileSync("render.js", lines.join("\n"), "utf8");
             ' || true
           fi
 

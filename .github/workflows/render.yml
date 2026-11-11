@@ -23,49 +23,122 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            ffmpeg xvfb \
+            ffmpeg xvfb espeak-ng python3-pip python3-setuptools \
             build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
             libxi-dev libglu1-mesa-dev libglew-dev pkg-config \
             libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
             libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm-dev \
             fonts-liberation fonts-noto fonts-noto-color-emoji
+          pip3 install edge-tts gTTS --break-system-packages || pip3 install edge-tts gTTS || true
 
       - name: Cache Node Modules
         id: cache-npm
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-motion-deps-v1
+          path: |
+            node_modules
+            package.json
+          key: ${{ runner.os }}-motion-deps-v2
 
       - name: Install All Motion Graphic JS Requirements
         if: steps.cache-npm.outputs.cache-hit != 'true'
         run: |
           npm init -y
-          npm install \
-            canvas gl three gsap animejs pixi.js lottie-web p5 d3 \
+          npm install --legacy-peer-deps \
+            @napi-rs/canvas ffmpeg-static \
+            canvas three gsap animejs pixi.js lottie-web p5 d3 \
             fabric konva matter-js sharp jimp \
             fluent-ffmpeg @ffmpeg-installer/ffmpeg @ffprobe-installer/ffprobe \
-            puppeteer playwright timecut ccapture.js
-          npx puppeteer browsers install chrome
+            google-tts-api node-gtts gtts \
+            puppeteer playwright
+          npm install --legacy-peer-deps gl timecut ccapture.js || true
+          npx puppeteer browsers install chrome || true
 
       - name: Auto-Detect & Install Extra Requirements from render.js
         run: |
+          [ -f "package.json" ] || npm init -y
           if [ -f "render.js" ]; then
             EXTRAS=$(grep -oE "require\(['\"]([^'\"]+)['\"]\)|from ['\"]([^'\"]+)['\"]" render.js \
               | sed -E "s/require\(['\"]|['\"]\)|from ['\"]|['\"]//g" \
               | cut -d'/' -f1,2 \
               | grep -vE "^\.|^fs$|^path$|^child_process$|^os$|^util$|^stream$|^crypto$|^http$|^https$|^url$|^events$|^buffer$" \
-              | sort -u)
+              | sort -u || true)
             for pkg in $EXTRAS; do
               if [ ! -d "node_modules/$pkg" ]; then
-                npm install "$pkg" --no-save || true
+                npm install "$pkg" --legacy-peer-deps || true
               fi
             done
           fi
 
+      - name: Prepare Compatibility & TTS Fallback Layer
+        run: |
+          # Perbaiki parameter client Google TTS yang sering terkena blokir 404/403 di server GitHub
+          if [ -f "render.js" ]; then
+            sed -i 's/client=tw-ob/client=gtx/g' render.js || true
+          fi
+
+          # Buat preload helper untuk memastikan canvas.data() RGBA & fallback suara TTS otomatis
+          cat << 'PRELOAD_EOF' > preload_fix.js
+          const { execSync } = require('child_process');
+          const https = require('https');
+          const fs = require('fs');
+
+          // 1. Pastikan @napi-rs/canvas mengembalikan buffer RGBA murni saat canvas.data() dipanggil
+          try {
+            const napiCanvas = require('@napi-rs/canvas');
+            const origCreateCanvas = napiCanvas.createCanvas;
+            napiCanvas.createCanvas = function(w, h) {
+              const c = origCreateCanvas(w, h);
+              const ctx = c.getContext('2d');
+              c.data = function() {
+                const imgData = ctx.getImageData(0, 0, w, h);
+                return Buffer.from(imgData.data.buffer, imgData.data.byteOffset, imgData.data.byteLength);
+              };
+              return c;
+            };
+          } catch (e) {}
+
+          // 2. Fallback otomatis ke edge-tts / ffmpeg jika Google Translate TTS gagal di IP GitHub Actions
+          const origGet = https.get;
+          https.get = function(url, options, cb) {
+            if (typeof options === 'function') {
+              cb = options;
+              options = {};
+            }
+            const urlStr = typeof url === 'string' ? url : (url && url.href ? url.href : '');
+            if (urlStr.includes('translate.google.com/translate_tts')) {
+              return origGet.call(https, url, options, (res) => {
+                if (res.statusCode !== 200) {
+                  try {
+                    const parsed = new URL(urlStr);
+                    const text = parsed.searchParams.get('q') || 'Mesin empat tak';
+                    const tmpMp3 = `/tmp/fallback_tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;
+                    try {
+                      execSync(`edge-tts --voice id-ID-ArdiNeural --text ${JSON.stringify(text)} --write-media "${tmpMp3}"`, { stdio: 'ignore' });
+                    } catch (e1) {
+                      try {
+                        execSync(`gtts-cli -l id ${JSON.stringify(text)} --output "${tmpMp3}"`, { stdio: 'ignore' });
+                      } catch (e2) {
+                        execSync(`ffmpeg -y -f lavfi -i anullsrc=r=24000:cl=mono -t 3 -q:a 9 -acodec libmp3lame "${tmpMp3}"`, { stdio: 'ignore' });
+                      }
+                    }
+                    const stream = fs.createReadStream(tmpMp3);
+                    stream.statusCode = 200;
+                    stream.headers = { 'content-type': 'audio/mpeg' };
+                    if (cb) cb(stream);
+                    return;
+                  } catch (err) {}
+                }
+                if (cb) cb(res);
+              });
+            }
+            return origGet.apply(https, arguments);
+          };
+          PRELOAD_EOF
+
       - name: Run JS Motion Graphic Render
         run: |
-          xvfb-run -a --server-args="-screen 0 1920x1080x24" node render.js
+          xvfb-run -a --server-args="-screen 0 1920x1080x24" node --require ./preload_fix.js render.js
 
       - name: Upload Rendered Video Artifact
         uses: actions/upload-artifact@v4

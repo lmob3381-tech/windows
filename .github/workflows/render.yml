@@ -46,7 +46,7 @@ jobs:
 
           echo "needs_voice=$NEEDS_VOICE" >> $GITHUB_OUTPUT
           echo "selected_model=$SELECTED_MODEL" >> $GITHUB_OUTPUT
-          echo "Auto-Detect Result -> needs_voice=$NEEDS_VOICE | selected_model=$SELECTED_MODEL"
+          echo "Auto-Detect Result -> needs_voice=$NEEDS_VOICE \vert{} selected_model=$SELECTED_MODEL"
 
       - name: Install System Dependencies
         run: |
@@ -94,11 +94,11 @@ jobs:
           [ -f "package.json" ] || npm init -y
           if [ -f "render.js" ]; then
             EXTRAS=$(grep -oE "require\(['\"]([^'\"]+)['\"]\)|from ['\"]([^'\"]+)['\"]" render.js \
-              | sed -E "s/require\(['\"]|['\"]\)|from ['\"]|['\"]//g" \
+              | sed -E "s/require\(['\"]\vert{}['\"]\)|from ['\"]|['\"]//g" \
               | cut -d'/' -f1,2 \
-              | grep -vE "^\.|^fs$|^path$|^child_process$|^os$|^util$|^stream$|^crypto$|^http$|^https$|^url$|^events$|^buffer$" \
+              | grep -vE "^\.|^fs$\vert{}^path$|^child_process$\vert{}^os$|^util$\vert{}^stream$|^crypto$\vert{}^http$|^https$\vert{}^url$|^events$\vert{}^buffer$" \
               | sort -u || true)
-            for pkg in $EXTRAS; do
+            for pkg in $EXTRAS; then
               if [ ! -d "node_modules/$pkg" ]; then
                 npm install "$pkg" --legacy-peer-deps || true
               fi
@@ -194,7 +194,7 @@ jobs:
                   voice_settings: { stability: 0.55, similarity_boost: 0.8 }
                 });
                 execSync(
-                  `curl -s -f -X POST "https://api.elevenlabs.io/v1/text-to-speech/${voiceId}" ` +
+                  `curl -s -f -X POST "[https://api.elevenlabs.io/v1/text-to-speech/$](https://api.elevenlabs.io/v1/text-to-speech/$){voiceId}" ` +
                   `-H "xi-api-key: ${process.env.ELEVENLABS_API_KEY}" ` +
                   `-H "Content-Type: application/json" ` +
                   `-d '${payload.replace(/'/g, "'\\''")}' -o "${ outputMp3Path }"`,
@@ -262,9 +262,9 @@ jobs:
 
               // Jika render.js memanggil Google Translate TTS / endpoint TTS standar,
               // otomatis alihkan ke Stock Model Neural Studio (Setara ElevenLabs) agar suaranya rapi!
-              if (urlStr.includes('translate.google.com/translate_tts') || urlStr.includes('tts://')) {
+              if (urlStr.includes('[translate.google.com/translate_tts](https://translate.google.com/translate_tts)') || urlStr.includes('tts://')) {
                 try {
-                  const parsed = new URL(urlStr.replace('tts://', 'https://tts.local/?'));
+                  const parsed = new URL(urlStr.replace('tts://', '[https://tts.local/](https://tts.local/)?'));
                   const text = parsed.searchParams.get('q') || parsed.searchParams.get('text') || 'Narasi video';
                   const modelParam = parsed.searchParams.get('model') || parsed.searchParams.get('voice') || process.env.DEFAULT_VOICE_MODEL;
                   const tmpMp3 = `/tmp/studio_tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;
@@ -290,6 +290,50 @@ jobs:
           # normalkan menjadi atempo=1.00 karena suara Neural Studio sudah memiliki tempo natural & rapi
           if [ "$NEEDS_VOICE" == "true" ] && [ -f "render.js" ]; then
             sed -i 's/atempo=1.18/atempo=1.02/g' render.js || true
+          fi
+
+          # Auto-Fix SyntaxError (seperti backtick/kutip tidak tertutup sebelum rgba) pada render.js
+          if [ -f "render.js" ]; then
+            node -e '
+              const fs = require("fs");
+              const vm = require("vm");
+              let code = fs.readFileSync("render.js", "utf8").replace(/^\s*```[a-zA-Z]*\s*$/gm, "");
+              const countBt = (s) => { let c = 0; for (let i = 0; i < s.length; i++) { if (s[i] === "\\") { i++; continue; } if (s[i] === "`") c++; } return c; };
+              const fixLine = (line) => {
+                if (line.includes("``")) { const f = line.replace(/``+/g, "`"); if (countBt(f) % 2 === 0) return f; }
+                if (line.includes("${")) {
+                  let f = line.replace(/`([^`]*\$\{[^`]*?)["\x27](\s*[;,)\]]*\s*(?:\/\/.*)?)$/, "`$1`$2").replace(/["\x27]([^"\x27]*\$\{[^"\x27]*?)`/g, "`$1`");
+                  if (countBt(f) % 2 === 0) return f;
+                  f = f.replace(/(`[^`]*\$\{[^`]*?)(\s*;?\s*(?:\/\/.*)?)$/, "$1`$2");
+                  if (countBt(f) % 2 === 0) return f;
+                }
+                let fq = line.replace(/(["\x27])([^"\x27`]*?)`/g, "$1$2$1").replace(/`([^"\x27`]*?)(["\x27])/g, "$2$1$2");
+                if (countBt(fq) % 2 === 0 && fq !== line) return fq;
+                return line.replace(/`/g, "");
+              };
+              for (let a = 0; a < 25; a++) {
+                try { new vm.Script(code, { filename: "render.js" }); break; } catch (e) {
+                  const m = ((e && e.stack) || "").match(/render\.js:(\d+)/);
+                  if (!m) break;
+                  const idx = parseInt(m[1], 10) - 1, lines = code.split("\n");
+                  let mod = false;
+                  if (idx >= 0 && idx < lines.length && countBt(lines[idx]) % 2 === 1) {
+                    const b = lines[idx]; lines[idx] = fixLine(b); if (lines[idx] !== b) mod = true;
+                  }
+                  if (!mod) {
+                    for (let i = idx - 1; i >= 0; i--) {
+                      if (countBt(lines[i]) % 2 === 1) {
+                        const b = lines[i]; lines[i] = fixLine(b);
+                        if (lines[i] !== b) { console.log("[Auto-Fix] Memperbaiki backtick/kutip tidak tertutup pada baris " + (i + 1)); mod = true; break; }
+                      }
+                    }
+                  }
+                  if (!mod) break;
+                  code = lines.join("\n");
+                }
+              }
+              fs.writeFileSync("render.js", code, "utf8");
+            ' || true
           fi
 
       - name: Run JS Motion Graphic Render

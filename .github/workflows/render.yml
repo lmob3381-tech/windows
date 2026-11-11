@@ -19,6 +19,24 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Sanitize & Auto-Fix render.js Syntax
+        run: |
+          node -e '
+            const fs = require("fs");
+            const vm = require("vm");
+            const bt = "\x60";
+            let raw = fs.readFileSync("render.js", "utf8")
+              .replace(/\r\n/g, "\n")
+              .replace(/^\s*\x60\x60\x60[a-zA-Z]*\s*$/gm, "");
+            let lines = raw.split("\n").map(line => {
+              if (line.includes("${") && /^\s*[\x27\x60].*[\x27\x60]\s*[;,)\]]*\s*$/.test(line)) {
+                return line.replace(/^(\s*)[\x27\x60](.*)[\x27\x60](\s*[;,)\]]*\s*)$/, "$1" + bt + "$2" + bt + "$3");
+              }
+              return line;
+            });
+            fs.writeFileSync("render.js", lines.join("\n"), "utf8");
+          '
+
       - name: Auto-Detect Voice & Model Requirements from render.js
         id: detect-voice
         run: |
@@ -49,25 +67,15 @@ jobs:
 
       - name: Verify System Dependencies (Fast Skip if Pre-installed)
         run: |
-          # Pada GitHub Actions ubuntu-latest, ffmpeg, xvfb-run, Chrome, dan font sudah terinstall bawaan!
-          # Lewati apt-get sepenuhnya agar tidak terjebak timeout mirror archive.ubuntu.com (hemat 15+ menit).
           if command -v ffmpeg &> /dev/null && command -v xvfb-run &> /dev/null; then
             echo "⚡ ffmpeg dan xvfb-run sudah tersedia di runner! Melewati apt-get install."
           else
-            echo "Mengonfigurasi DNS & mirror HTTPS cadangan..."
-            printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" | sudo tee /etc/resolv.conf > /dev/null || true
-            if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-              sudo sed -i 's|http://.*archive.ubuntu.com/ubuntu/|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources || true
-              sudo sed -i 's|http://security.ubuntu.com/ubuntu/|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources || true
-            fi
-            sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=2 -o Acquire::http::Timeout="5" update || true
-            sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends ffmpeg xvfb || true
+            sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg xvfb || true
           fi
 
       - name: Install Neural Voice Engine (Only When Needed by render.js)
         if: steps.detect-voice.outputs.needs_voice == 'true'
         run: |
-          echo "🎙️ Mengaktifkan Engine Suara Neural via PyPI HTTPS (tanpa apt-get)..."
           pip3 install --quiet edge-tts gTTS --break-system-packages || pip3 install --quiet edge-tts gTTS || true
 
       - name: Cache Node Modules
@@ -142,7 +150,6 @@ jobs:
           const https = require('https');
           const fs = require('fs');
 
-          // 0a. Fallback otomatis require('canvas') ke '@napi-rs/canvas' jika paket native canvas tidak ada
           const origLoad = Module._load;
           Module._load = function(request, parent, isMain) {
             if (request === 'canvas') {
@@ -155,7 +162,6 @@ jobs:
             return origLoad.apply(this, arguments);
           };
 
-          // 0b. PROTEKSI ANTI-EPIPE PADA FFMPEG SPAWN
           const origSpawn = child_process.spawn;
           child_process.spawn = function(command, args, options) {
             if (Array.isArray(args) && String(command).toLowerCase().includes('ffmpeg')) {
@@ -185,7 +191,6 @@ jobs:
             return proc;
           };
 
-          // 1. Pastikan @napi-rs/canvas memiliki fungsi canvas.data() yang mengeluarkan Buffer RGBA murni
           try {
             const napiCanvas = require('@napi-rs/canvas');
             const origCreateCanvas = napiCanvas.createCanvas;
@@ -200,7 +205,6 @@ jobs:
             };
           } catch (e) {}
 
-          // 2. Katalog Stock Model Suara Neural
           const VOICE_STOCK_MODELS = {
             id_andrew_studio:   { voice: 'en-US-AndrewMultilingualNeural',   pitch: '+0Hz', rate: '+4%',  preset: 'studio_warm' },
             id_ava_studio:      { voice: 'en-US-AvaMultilingualNeural',      pitch: '+0Hz', rate: '+2%',  preset: 'studio_crisp' },
@@ -242,28 +246,6 @@ jobs:
             const cfg = VOICE_STOCK_MODELS[activeKey] || VOICE_STOCK_MODELS['id_andrew_studio'];
             const rawMp3 = '/tmp/raw_tts_' + Date.now() + '_' + Math.random().toString(36).slice(2) + '.mp3';
             let success = false;
-
-            if (process.env.ELEVENLABS_API_KEY) {
-              try {
-                const voiceId = process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB';
-                const payload = JSON.stringify({
-                  text: text,
-                  model_id: 'eleven_multilingual_v2',
-                  voice_settings: { stability: 0.55, similarity_boost: 0.8 }
-                });
-                execFileSync('curl', [
-                  '-s', '-f', '-X', 'POST',
-                  'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId,
-                  '-H', 'xi-api-key: ' + process.env.ELEVENLABS_API_KEY,
-                  '-H', 'Content-Type: application/json',
-                  '-d', payload,
-                  '-o', outputMp3Path
-                ], { stdio: 'ignore' });
-                if (fs.existsSync(outputMp3Path) && fs.statSync(outputMp3Path).size > 500) {
-                  return outputMp3Path;
-                }
-              } catch (e) {}
-            }
 
             const candidates = [cfg, VOICE_STOCK_MODELS['id_ardi_pro'], VOICE_STOCK_MODELS['id_gadis_natural']];
             for (const cand of candidates) {

@@ -1,375 +1,636 @@
-```javascript
-const VOICE_MODEL = "char_instruktur";
+const VOICE_MODEL = "id_brian_narrator";
+
+/**
+ * ============================================================================
+ * RENDER.JS - CINEMATIC 9:16 (60 FPS, 5 MENIT) DOKUMENTER ANIMASI NUKLIR & CHERNOBYL
+ * ============================================================================
+ * Fitur Utama:
+ * 1. Resolusi 1080x1920 (9:16 Vertical Full HD), 60 FPS, Durasi Target 300 Detik (5 Menit).
+ * 2. Animasi Karakter Manusia Lengkap (Rigging Kepala, Ekspresi Wajah, Lip-Sync Suara,
+ *    Kedipan Mata, Bahu, Siku, Tangan, Kaki Berjalan, Jas Lab, Seragam Operator RBMK,
+ *    dan Hazmat Likuidator).
+ * 3. Visualisasi Benda & Fisika Lengkap (Inti Atom Uranium-235, Reaksi Berantai Fisi,
+ *    Skema PLTN & Turbin Berputar, Ruang Kontrol Chernobyl Unit 4, Batang Kendali
+ *    Berujung Grafit, Koefisien Rongga Positif, Ledakan Reaktor RBMK-1000, Helikopter
+ *    Likuidator, Bianglala Pripyat, Hutan Merah, dan New Safe Confinement).
+ * 4. Perhitungan Durasi Audio Presisi (ffprobe) + Anti-Tabrakan Suara (Zero Voice Overlap).
+ * 5. Synthesizer Efek Suara (SFX) & Ambient Sinematik Prosedural (Detak Geiger Counter,
+ *    Sirene Alarm AZ-5, Gemuruh Uap Tekanan Tinggi, Ledakan Reaktor, Helikopter,
+ *    Turbin Listrik, dan Drone Atmosferik) yang digabung murni tanpa filter atempo=1.18.
+ * ============================================================================
+ */
 
 const fs = require("fs");
 const path = require("path");
-const { spawn, execSync } = require("child_process");
+const { spawn, execFileSync } = require("child_process");
 
-// Load @napi-rs/canvas with fallback to node-canvas
 let createCanvas;
 try {
-  ({ createCanvas } = require("@napi-rs/canvas"));
+  createCanvas = require("@napi-rs/canvas").createCanvas;
 } catch (err) {
-  ({ createCanvas } = require("canvas"));
+  createCanvas = require("canvas").createCanvas;
 }
 
 // ============================================================================
-// KONFIGURASI VIDEO UTAMA (1920x1080, 30 FPS, ~180 DETIK / 3 MENIT)
+// KONFIGURASI VIDEO & TIMELINE UTAMA
 // ============================================================================
-const WIDTH = 1920;
-const HEIGHT = 1080;
-const FPS = 30;
+const WIDTH = 1080;
+const HEIGHT = 1920;
+const FPS = 60;
+const TARGET_TOTAL_DURATION = 300.0; // 5 Menit tepat (300 detik = 18.000 frame @ 60fps)
 const OUTPUT_FILE = path.resolve("./output.mp4");
-const TEMP_DIR = path.resolve("./temp_render_assets");
+const TEMP_DIR = path.resolve("./temp_nuclear_studio");
 
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
 // ============================================================================
-// UTILITAS MATEMATIKA & INTERPOLASI
+// DAFTAR 15 ADEGAN CERITA LENGKAP (5 BABAK NARASI MENDALAM)
 // ============================================================================
-const DEG2RAD = Math.PI / 180;
+const SCENES = [
+  {
+    id: "scene_01",
+    act: "BABAK I: RAHASIA INTI ATOM",
+    title: "Energi Terdahsyat di Alam Semesta",
+    timeLabel: "LABORATORIUM FISIKA NUKLIR",
+    geigerCpm: 18,
+    powerMw: 0,
+    themeColor: "#00f2fe",
+    sfxType: "lab_hum",
+    cameraZoom: 1.04,
+    minDuration: 19.0,
+    narration:
+      "Pernahkah kamu membayangkan, bahwa di dalam sebutir logam seukuran ujung jari ini, tersimpan energi yang setara dengan seribu ton batu bara? Inilah energi nuklir. Sebuah kekuatan mahadahsyat yang bersembunyi di jantung setiap atom di alam semesta kita. Hari ini, saya akan mengajakmu menyelami kisah nyata di balik kekuatan atom, bagaimana ia menerangi jutaan rumah, hingga malam kelam ketika ia lepas kendali di Chernobyl."
+  },
+  {
+    id: "scene_02",
+    act: "BABAK I: RAHASIA INTI ATOM",
+    title: "Anatomi Uranium-235 & Tumbukan Neutron",
+    timeLabel: "SKALA SUB-MIKROSKOPIS: 10⁻¹⁵ METER",
+    geigerCpm: 45,
+    powerMw: 10,
+    themeColor: "#38ef7d",
+    sfxType: "atom_pulse",
+    cameraZoom: 1.08,
+    minDuration: 20.0,
+    narration:
+      "Mari kita perbesar pandangan kita jutaan kali lipat ke dalam inti atom Uranium dua tiga lima. Inti ini sangat padat namun tidak stabil, terdiri dari sembilan puluh dua proton dan seratus empat puluh tiga neutron yang saling berdesakan. Ketika satu partikel neutron bebas ditembakkan dengan kecepatan tepat ke arahnya, inti Uranium akan menangkap neutron itu, berguncang hebat, lalu terbelah menjadi dua inti yang lebih kecil."
+  },
+  {
+    id: "scene_03",
+    act: "BABAK I: RAHASIA INTI ATOM",
+    title: "Reaksi Berantai Eksponensial",
+    timeLabel: "FISI NUKLIR & E = mc²",
+    geigerCpm: 120,
+    powerMw: 250,
+    themeColor: "#f7971e",
+    sfxType: "chain_reaction",
+    cameraZoom: 1.06,
+    minDuration: 20.0,
+    narration:
+      "Pembelahan yang disebut fisi nuklir ini melepaskan energi panas luar biasa sesuai persamaan legendaris Albert Einstein, E sama dengan m c kuadrat. Bukan hanya itu, setiap satu inti yang terbelah ikut melontarkan dua hingga tiga neutron baru. Neutron-neutron baru ini langsung menabrak inti Uranium lain di dekatnya, menciptakan reaksi berantai kilat yang melipatgandakan energi dalam hitungan nanodetik."
+  },
+  {
+    id: "scene_04",
+    act: "BABAK II: MESIN RAKSASA PEMBANGKIT LISTRIK",
+    title: "Mengendalikan Sang Naga di Dalam Reaktor",
+    timeLabel: "TERAS REAKTOR & BATANG KENDALI",
+    geigerCpm: 85,
+    powerMw: 1500,
+    themeColor: "#00d2ff",
+    sfxType: "reactor_core",
+    cameraZoom: 1.05,
+    minDuration: 20.0,
+    narration:
+      "Bagaimana manusia menjinakkan reaksi berantai ini agar tidak meledak? Di dalam pembangkit listrik tenaga nuklir, batang-batang bahan bakar Uranium disusun rapi di dalam bejana baja bertekanan tinggi. Di sela-selanya, terdapat batang kendali berbahan Boron atau Kadmium yang bertugas menyerap neutron berlebih. Saat batang kendali diturunkan, reaksi melambat. Saat diangkat sedikit, reaksi menghangat secara terukur."
+  },
+  {
+    id: "scene_05",
+    act: "BABAK II: MESIN RAKSASA PEMBANGKIT LISTRIK",
+    title: "Dari Uap Panas Menjadi Cahaya Kota",
+    timeLabel: "SIKLUS TERMODINAMIKA PLTN",
+    geigerCpm: 30,
+    powerMw: 3200,
+    themeColor: "#4facfe",
+    sfxType: "turbine_spin",
+    cameraZoom: 1.04,
+    minDuration: 20.0,
+    narration:
+      "Panas ekstrem dari teras reaktor mendidihkan air murni hingga berubah menjadi uap bertekanan tinggi. Uap inilah yang memutar bilah-bilah turbin raksasa dengan kecepatan ribuan putaran per menit. Putaran turbin menggerakkan generator elektromagnetik yang mengalirkan listrik bersih bebas asap karbon ke jutaan rumah, rumah sakit, dan pabrik, sementara uap air didinginkan kembali melalui menara pendingin."
+  },
+  {
+    id: "scene_06",
+    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
+    title: "Malam 25-26 April 1986: Reaktor RBMK-1000",
+    timeLabel: "PRIPYAT, UKRAINA - 25 APRIL 1986, 23:00",
+    geigerCpm: 60,
+    powerMw: 1600,
+    themeColor: "#f857a6",
+    sfxType: "control_room",
+    cameraZoom: 1.06,
+    minDuration: 20.0,
+    narration:
+      "Namun sejarah mencatat satu malam ketika aturan fisika dilanggar oleh ambisi dan kecerobohan. Tanggal dua puluh lima April seribu sembilan ratus delapan puluh enam, di Pembangkit Listrik Tenaga Nuklir Chernobyl dekat kota Pripyat, Ukraina. Para operator reaktor nomor empat yang bertipe R B M K seribu sedang bersiap menjalankan uji coba keamanan turbin apabila aliran listrik utama mendadak mati."
+  },
+  {
+    id: "scene_07",
+    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
+    title: "Jebakan Racun Xenon & Daya Anjlok",
+    timeLabel: "26 APRIL 1986 - 00:28 DINI HARI",
+    geigerCpm: 140,
+    powerMw: 30,
+    themeColor: "#ff512f",
+    sfxType: "xenon_warning",
+    cameraZoom: 1.07,
+    minDuration: 20.0,
+    narration:
+      "Uji coba itu ditunda selama berjam-jam karena permintaan listrik kota, sehingga giliran kerja jatuh kepada kru malam yang belum terlatih untuk skenario tersebut. Saat daya reaktor diturunkan, terjadi kesalahan prosedur yang membuat daya anjlok drastis hingga tinggal tiga puluh megawatt. Pada titik serendah itu, gas racun Xenon seratus tiga puluh lima menumpuk di dalam teras dan mencekik reaksi nuklir."
+  },
+  {
+    id: "scene_08",
+    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
+    title: "Cacat Fatal: Koefisien Rongga Positif",
+    timeLabel: "26 APRIL 1986 - 01:22:30 DINI HARI",
+    geigerCpm: 420,
+    powerMw: 200,
+    themeColor: "#ff0844",
+    sfxType: "void_boiling",
+    cameraZoom: 1.09,
+    minDuration: 21.0,
+    narration:
+      "Demi memaksa daya naik kembali, wakil kepala insinyur memerintahkan pencabutan hampir seluruh batang kendali, menyisakan jauh di bawah batas aman. Di sinilah cacat desain reaktor R B M K bekerja bagai bom waktu, yaitu koefisien rongga positif. Ketika air pendingin mendidih dan membentuk gelembung uap, bukannya melambat, reaktivitas neutron di dalam blok moderator grafit justru melonjak semakin liar dan tak terkendali."
+  },
+  {
+    id: "scene_09",
+    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
+    title: "Tombol AZ-5 & Ujung Grafit Pembawa Petaka",
+    timeLabel: "26 APRIL 1986 - 01:23:40 DINI HARI",
+    geigerCpm: 2800,
+    powerMw: 33000,
+    themeColor: "#ff0000",
+    sfxType: "az5_alarm",
+    cameraZoom: 1.12,
+    minDuration: 21.0,
+    narration:
+      "Pukul satu lewat dua puluh tiga menit empat puluh detik, kepala shift Aleksandr Akimov menekan tombol darurat A Z lima untuk memasukkan semua batang kendali sekaligus. Namun mereka tidak tahu, ujung bawah setiap batang kendali R B M K terbuat dari grafit pemercepat reaksi! Saat batang mulai turun, ujung grafit itu mendesak air keluar dan memicu lonjakan daya seratus kali lipat hingga tiga puluh tiga ribu megawatt!"
+  },
+  {
+    id: "scene_10",
+    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
+    title: "Pukul 01:23:45 — Dua Ledakan Mengoyak Malam",
+    timeLabel: "26 APRIL 1986 - 01:23:45 DINI HARI",
+    geigerCpm: 99999,
+    powerMw: 33000,
+    themeColor: "#ff4e00",
+    sfxType: "explosion_blast",
+    cameraZoom: 1.15,
+    minDuration: 20.0,
+    narration:
+      "Saluran bahan bakar pecah lebur seketika. Tekanan uap raksasa meledakkan tutup pelindung biologis seberat dua ribu ton hingga terlempar ke udara! Tiga detik kemudian, ledakan kedua yang dipicu reaksi hidrogen dan grafit panas menghancurkan atap gedung reaktor. Serpihan bahan bakar radioaktif dan grafit membara berhamburan keluar, sementara cahaya biru pendaran ionisasi menembus lurus ke langit malam."
+  },
+  {
+    id: "scene_11",
+    act: "BABAK IV: DAMPAK & PERJUANGAN KEMANUSIAAN",
+    title: "Musuh Tak Kasatmata & Pemadam Kebakaran",
+    timeLabel: "26 APRIL 1986 - 02:00 DINI HARI",
+    geigerCpm: 45000,
+    powerMw: 0,
+    themeColor: "#ff2a54",
+    sfxType: "geiger_heavy",
+    cameraZoom: 1.07,
+    minDuration: 20.0,
+    narration:
+      "Regu pemadam kebakaran tiba hanya dalam hitungan menit tanpa mengetahui bahwa teras reaktor telah terbuka. Mereka mengira itu hanyalah kebakaran atap biasa. Padahal, setiap detik tubuh mereka dihujani sinar gamma berenergi tinggi yang memutus untaian D N A di dalam sel-sel hidup. Dua puluh delapan petugas dan operator gugur dalam beberapa minggu akibat sindrom radiasi akut yang sangat menyakitkan."
+  },
+  {
+    id: "scene_12",
+    act: "BABAK IV: DAMPAK & PERJUANGAN KEMANUSIAAN",
+    title: "Pengorbanan 600.000 Likuidator & Helikopter",
+    timeLabel: "MEI 1986 - OPERASI PEMADAMAN TERAS",
+    geigerCpm: 18500,
+    powerMw: 0,
+    themeColor: "#f7b733",
+    sfxType: "helicopter_drop",
+    cameraZoom: 1.06,
+    minDuration: 20.0,
+    narration:
+      "Kebakaran grafit di dalam kawah reaktor terus menyemburkan awan radioaktif selama sepuluh hari. Pilot-pilot helikopter terbang nekat menembus kepulan asap mematikan untuk menjatuhkan lima ribu ton pasir, timbal, dan boron. Tiga sukarelawan penyelam bahkan turun ke lorong banjir yang gelap gulita di bawah reaktor untuk membuka katup air agar lelehan korium tidak memicu ledakan uap kedua yang lebih dahsyat."
+  },
+  {
+    id: "scene_13",
+    act: "BABAK IV: DAMPAK & PERJUANGAN KEMANUSIAAN",
+    title: "Kota Hantu Pripyat & Hutan Merah",
+    timeLabel: "27 APRIL 1986 - EVAKUASI 49.000 WARGA",
+    geigerCpm: 6200,
+    powerMw: 0,
+    themeColor: "#e65c00",
+    sfxType: "evac_siren",
+    cameraZoom: 1.05,
+    minDuration: 20.0,
+    narration:
+      "Tiga puluh enam jam setelah ledakan, lebih dari seribu bus dikerahkan untuk mengevakuasi empat puluh sembilan ribu penduduk Pripyat. Mereka hanya diberi waktu dua jam untuk mengemas barang dan tidak pernah diizinkan pulang selamanya. Pohon-pohon pinus di sekitar reaktor mati mengering dan berubah warna menjadi merah karat akibat radiasi ekstrem, sementara awan Iodium dan Cesium terbawa angin melintasi benua Eropa."
+  },
+  {
+    id: "scene_14",
+    act: "BABAK V: WARISAN SAINS & MASA DEPAN",
+    title: "Kubah Pelindung Baja & Revolusi Keamanan",
+    timeLabel: "NEW SAFE CONFINEMENT - ABAD KE-21",
+    geigerCpm: 110,
+    powerMw: 0,
+    themeColor: "#00b09b",
+    sfxType: "modern_shield",
+    cameraZoom: 1.05,
+    minDuration: 20.0,
+    narration:
+      "Untuk mengurung sisa radiasi selama seratus tahun ke depan, dunia bersatu membangun struktur baja lengkung raksasa bernama New Safe Confinement yang digeser menutupi sarkofagus lama. Tragedi Chernobyl memicu revolusi besar dalam rekayasa nuklir dunia. Reaktor modern generasi terbaru kini wajib memiliki koefisien negatif alami dan sistem pendingin pasif berbasis gravitasi yang otomatis berhenti sendiri tanpa bantuan listrik."
+  },
+  {
+    id: "scene_15",
+    act: "BABAK V: WARISAN SAINS & MASA DEPAN",
+    title: "Pelajaran Abadi dari Jantung Atom",
+    timeLabel: "EPILOG: SAINS, KEJUJURAN & KEMANUSIAAN",
+    geigerCpm: 15,
+    powerMw: 4000,
+    themeColor: "#00f2fe",
+    sfxType: "epilogue_pad",
+    cameraZoom: 1.04,
+    minDuration: 19.0,
+    narration:
+      "Pada akhirnya, kisah energi nuklir dan Chernobyl mengajarkan kita satu kebenaran abadi. Sains memberikan manusia kunci menuju energi yang nyaris tak terbatas untuk menyelamatkan bumi dari krisis iklim. Namun kekuatan sebesar itu menuntut kerendahan hati, keselamatan tanpa kompromi, dan kejujuran mutlak terhadap hukum alam. Terima kasih telah menyimak perjalanan sains ini sampai akhir."
+  }
+];
 
-function clamp(val, min, max) {
-  return Math.max(min, Math.min(max, val));
+// ============================================================================
+// UTILITAS: PENGUKURAN DURASI AUDIO PRESISI & FALLBACK TTS
+// ============================================================================
+function getAudioDurationSec(filePath) {
+  try {
+    const out = execFileSync("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      filePath
+    ]);
+    const val = parseFloat(out.toString().trim());
+    if (!Number.isNaN(val) && val > 0.1) {
+      return val;
+    }
+  } catch (e) {
+    // Fallback estimasi kata jika ffprobe gagal pada file korup
+  }
+  return 0;
+}
+
+function generateSilentOrToneMp3Fallback(filePath, durationSec) {
+  execFileSync("ffmpeg", [
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `anullsrc=r=44100:cl=stereo:d=${durationSec.toFixed(3)}`,
+    "-c:a",
+    "libmp3lame",
+    "-q:a",
+    "4",
+    filePath
+  ]);
+}
+
+async function buildVoiceoverTimeline() {
+  console.log("=== [1/4] MEMBUAT VOICEOVER STUDIO & MENGHITUNG TIMELINE ANTI-TABRAKAN ===");
+  const prePad = 0.65;
+  const postPad = 1.15;
+
+  for (let i = 0; i < SCENES.length; i++) {
+    const sc = SCENES[i];
+    const mp3Path = path.join(TEMP_DIR, `${sc.id}_voice.mp3`);
+    sc.voicePath = mp3Path;
+
+    const wordCount = sc.narration.trim().split(/\s+/).length;
+    const estimatedVoiceSec = Math.max(12.0, wordCount / 2.35);
+
+    try {
+      if (typeof global.generateStudioVoice === "function") {
+        const res = global.generateStudioVoice(sc.narration, mp3Path, VOICE_MODEL);
+        if (res && typeof res.then === "function") {
+          await res;
+        }
+      } else {
+        generateSilentOrToneMp3Fallback(mp3Path, estimatedVoiceSec);
+      }
+    } catch (err) {
+      console.warn(`[WARN] Fallback voice untuk ${sc.id}:`, err.message);
+      generateSilentOrToneMp3Fallback(mp3Path, estimatedVoiceSec);
+    }
+
+    if (!fs.existsSync(mp3Path) || fs.statSync(mp3Path).size < 256) {
+      generateSilentOrToneMp3Fallback(mp3Path, estimatedVoiceSec);
+    }
+
+    let measuredSec = getAudioDurationSec(mp3Path);
+    if (measuredSec <= 0.2) {
+      measuredSec = estimatedVoiceSec;
+    }
+
+    sc.voiceDuration = measuredSec;
+    sc.prePad = prePad;
+    sc.postPad = postPad;
+    sc.rawDuration = Math.max(sc.minDuration, sc.voiceDuration + prePad + postPad);
+  }
+
+  // Hitung total durasi awal dan sesuaikan agar tepat >= 300 detik (5 menit) tanpa menabrakkan suara
+  const sumRaw = SCENES.reduce((acc, s) => acc + s.rawDuration, 0);
+  const extraNeeded = Math.max(0, TARGET_TOTAL_DURATION - sumRaw);
+  const extraPerScene = extraNeeded / SCENES.length;
+
+  let cursor = 0.0;
+  for (let i = 0; i < SCENES.length; i++) {
+    const sc = SCENES[i];
+    sc.duration = sc.rawDuration + extraPerScene;
+    sc.startTime = cursor;
+    sc.endTime = cursor + sc.duration;
+    // Voiceover selalu mulai setelah prePad dari startTime adegan, dan selesai sebelum endTime - postPad
+    sc.voiceStartTime = sc.startTime + sc.prePad;
+    sc.voiceEndTime = sc.voiceStartTime + sc.voiceDuration;
+    cursor = sc.endTime;
+
+    // Pecah kata untuk animasi subtitle sinkron & lip-sync karakter
+    const words = sc.narration.trim().split(/\s+/);
+    const totalChars = words.reduce((a, w) => a + w.length + 1, 0);
+    let wCursor = sc.voiceStartTime;
+    sc.wordTimings = words.map((w) => {
+      const wDur = ( (w.length + 1) / totalChars ) * sc.voiceDuration;
+      const item = {
+        word: w,
+        start: wCursor,
+        end: wCursor + wDur
+      };
+      wCursor += wDur;
+      return item;
+    });
+
+    console.log(
+      `  -> ${sc.id} | Scene: [${sc.startTime.toFixed(2)}s - ${sc.endTime.toFixed(2)}s] | ` +
+      `Voice: [${sc.voiceStartTime.toFixed(2)}s - ${sc.voiceEndTime.toFixed(2)}s] (${sc.voiceDuration.toFixed(2)}s)`
+    );
+  }
+
+  const totalFinalDuration = cursor;
+  console.log(`=== TOTAL DURASI TERKUNCI: ${totalFinalDuration.toFixed(2)} DETIK (${Math.round(totalFinalDuration * FPS)} FRAMES @ ${FPS} FPS) ===`);
+  return totalFinalDuration;
+}
+
+// ============================================================================
+// SYNTHESIZER EFEK SUARA (SFX) & AMBIENT MUSIK PROSEDURAL (WAV 44.1kHz STEREO)
+// ============================================================================
+function generateProceduralSfxWav(totalDurationSec, outWavPath) {
+  console.log("=== [2/4] MENSINTESIS EFEK SUARA (SFX) SINEMATIK SESUAI JALAN CERITA ===");
+  const sampleRate = 22050; // 22.05kHz Stereo untuk efisiensi memori & kejernihan SFX
+  const totalSamples = Math.ceil(totalDurationSec * sampleRate);
+  const numChannels = 2;
+  const bytesPerSample = 2;
+  const dataSize = totalSamples * numChannels * bytesPerSample;
+  const buffer = Buffer.alloc(44 + dataSize);
+
+  // Header WAV standar
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20); // PCM
+  buffer.writeUInt16LE(numChannels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * numChannels * bytesPerSample, 28);
+  buffer.writeUInt16LE(numChannels * bytesPerSample, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataSize, 40);
+
+  // PRNG deterministik untuk noise ledakan & klik Geiger Counter
+  let seed = 19860426;
+  function rand() {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return (seed / 4294967296) * 2 - 1;
+  }
+
+  let lowPassState = 0;
+  let geigerHoldSamples = 0;
+  let geigerFreq = 2400;
+
+  let sceneIdx = 0;
+  for (let i = 0; i < totalSamples; i++) {
+    const t = i / sampleRate;
+    while (sceneIdx < SCENES.length - 1 && t >= SCENES[sceneIdx].endTime) {
+      sceneIdx++;
+    }
+    const sc = SCENES[sceneIdx];
+    const localT = t - sc.startTime;
+    const sceneProgress = Math.max(0, Math.min(1, localT / sc.duration));
+
+    // Ducking volume SFX saat karakter sedang berbicara agar narasi jernih 100%
+    const isSpeaking = t >= sc.voiceStartTime && t <= sc.voiceEndTime;
+    const duckGain = isSpeaking ? 0.24 : 0.58;
+
+    let left = 0;
+    let right = 0;
+
+    // 1. Sub-bass & Drone Atmosferik sesuai Babak
+    const baseFreq = sceneIdx >= 5 && sceneIdx <= 12 ? 55.0 : 65.41; // A1 (tegang) vs C2 (ilmiah/harapan)
+    const fifthFreq = baseFreq * 1.498;
+    const minorThirdFreq = baseFreq * (sceneIdx >= 5 && sceneIdx <= 12 ? 1.189 : 1.26);
+    const padSlowMod = 0.5 + 0.5 * Math.sin(t * 0.45);
+    const drone =
+      0.08 * Math.sin(2 * Math.PI * baseFreq * t) +
+      0.04 * Math.sin(2 * Math.PI * fifthFreq * t + Math.sin(t * 0.8)) +
+      0.03 * padSlowMod * Math.sin(2 * Math.PI * minorThirdFreq * t);
+    left += drone;
+    right += drone * 0.95;
+
+    // 2. Detak Jantung Sinematik saat ketegangan Chernobyl (Scene 6 - 11)
+    if (sceneIdx >= 5 && sceneIdx <= 10) {
+      const beatPeriod = sceneIdx >= 8 ? 0.62 : 0.88;
+      const beatPhase = t % beatPeriod;
+      if (beatPhase < 0.12) {
+        const env = Math.sin((beatPhase / 0.12) * Math.PI);
+        const thump = Math.sin(2 * Math.PI * 46 * beatPhase) * env * 0.16;
+        left += thump;
+        right += thump;
+      } else if (beatPhase >= 0.16 && beatPhase < 0.28) {
+        const env2 = Math.sin(((beatPhase - 0.16) / 0.12) * Math.PI);
+        const thump2 = Math.sin(2 * Math.PI * 38 * (beatPhase - 0.16)) * env2 * 0.11;
+        left += thump2;
+        right += thump2;
+      }
+    }
+
+    // 3. Efek Spesifik per Adegan
+    if (sc.sfxType === "atom_pulse" || sc.sfxType === "chain_reaction") {
+      // Dengung partikel kuantum & zap tumbukan neutron
+      const shimmer = 0.04 * Math.sin(2 * Math.PI * (440 + 180 * Math.sin(t * 3.5)) * t);
+      const pulseGate = Math.pow(Math.max(0, Math.sin(t * (sc.sfxType === "chain_reaction" ? 9.0 : 3.5))), 8);
+      const zap = pulseGate * 0.12 * Math.sin(2 * Math.PI * (880 - 300 * (t % 0.3)) * t);
+      left += shimmer + zap;
+      right += shimmer * 0.8 + zap * 1.1;
+    } else if (sc.sfxType === "reactor_core" || sc.sfxType === "turbine_spin") {
+      // Deru turbin uap & mekanisme batang kendali
+      const rpmFreq = sc.sfxType === "turbine_spin" ? 100 + 25 * Math.sin(t * 0.5) : 72;
+      const hum =
+        0.06 * Math.sin(2 * Math.PI * rpmFreq * t) +
+        0.03 * Math.sin(2 * Math.PI * rpmFreq * 2 * t);
+      const steamNoise = rand() * 0.025;
+      lowPassState = 0.88 * lowPassState + 0.12 * steamNoise;
+      left += hum + lowPassState;
+      right += hum + lowPassState;
+    } else if (sc.sfxType === "void_boiling") {
+      // Gelembung uap bertekanan tinggi mendidih di pipa RBMK
+      const rumble = rand() * (0.06 + 0.08 * sceneProgress);
+      lowPassState = 0.92 * lowPassState + 0.08 * rumble;
+      const pipePing = Math.pow(Math.max(0, Math.sin(t * 6.5)), 14) * 0.09 * Math.sin(2 * Math.PI * 1120 * t);
+      left += lowPassState + pipePing;
+      right += lowPassState + pipePing * 0.9;
+    } else if (sc.sfxType === "az5_alarm") {
+      // Sirene Darurat Ruang Kontrol AZ-5 (Dual-tone Soviet Klaxon)
+      const sirenCycle = t % 1.1;
+      const sirenFreq = sirenCycle < 0.55 ? 680 + 180 * (sirenCycle / 0.55) : 860 - 180 * ((sirenCycle - 0.55) / 0.55);
+      const sirenWave =
+        0.13 * Math.sin(2 * Math.PI * sirenFreq * t) +
+        0.06 * Math.sign(Math.sin(2 * Math.PI * sirenFreq * t));
+      const steamBuild = rand() * 0.12 * sceneProgress;
+      lowPassState = 0.9 * lowPassState + 0.1 * steamBuild;
+      left += sirenWave * 0.85 + lowPassState;
+      right += sirenWave + lowPassState;
+    } else if (sc.sfxType === "explosion_blast") {
+      // Dua Ledakan Dahsyat Chernobyl (Detik ke-1.2 dan ke-4.0 dalam scene_10)
+      const blast1T = localT - 1.2;
+      const blast2T = localT - 4.0;
+      let blastAmp = 0;
+      if (blast1T >= 0 && blast1T < 3.5) {
+        blastAmp += 0.55 * Math.exp(-blast1T * 1.35);
+      }
+      if (blast2T >= 0 && blast2T < 6.5) {
+        blastAmp += 0.75 * Math.exp(-blast2T * 0.75);
+      }
+      const rawNoise = rand();
+      lowPassState = 0.93 * lowPassState + 0.07 * rawNoise;
+      const subBoom =
+        blastAmp *
+        (lowPassState * 2.4 + 0.35 * Math.sin(2 * Math.PI * 34 * localT) + 0.18 * rawNoise);
+      left += subBoom;
+      right += subBoom * 0.96;
+    } else if (sc.sfxType === "helicopter_drop") {
+      // Baling-baling Helikopter Mi-8 Likuidator
+      const bladeGate = 0.5 + 0.5 * Math.sin(2 * Math.PI * 11.5 * t);
+      const rotorNoise = rand() * 0.14 * Math.pow(bladeGate, 3);
+      lowPassState = 0.84 * lowPassState + 0.16 * rotorNoise;
+      left += lowPassState * 1.2;
+      right += lowPassState * 0.9;
+    } else if (sc.sfxType === "evac_siren") {
+      // Sirene Evakuasi Kota Pripyat dari kejauhan
+      const wailFreq = 480 + 160 * Math.sin(2 * Math.PI * 0.28 * t);
+      const wail = 0.07 * Math.sin(2 * Math.PI * wailFreq * t);
+      left += wail;
+      right += wail * 0.85;
+    }
+
+    // 4. Detektor Radiasi Geiger-Müller Counter (Aktif sesuai intensitas geigerCpm)
+    const cpm = sc.geigerCpm || 20;
+    const clicksPerSec = Math.min(180, cpm / 25);
+    const clickProb = clicksPerSec / sampleRate;
+    if (geigerHoldSamples <= 0 && (seed & 0xffff) / 65536 < clickProb) {
+      geigerHoldSamples = Math.floor(sampleRate * 0.0018);
+      geigerFreq = 2100 + ((seed >>> 8) % 1400);
+    }
+    if (geigerHoldSamples > 0) {
+      const clickWave = 0.22 * Math.sin(2 * Math.PI * geigerFreq * t) * (rand() * 0.5 + 0.5);
+      left += clickWave;
+      right += clickWave;
+      geigerHoldSamples--;
+    }
+
+    // Transisi lembut di awal & akhir adegan (Whoosh pendek)
+    if (localT < 0.35) {
+      const wEnv = Math.sin((localT / 0.35) * Math.PI);
+      const whoosh = rand() * 0.04 * wEnv;
+      left += whoosh;
+      right += whoosh;
+    }
+
+    // Terapkan ducking gain & soft clipping
+    const outL = Math.max(-0.95, Math.min(0.95, left * duckGain));
+    const outR = Math.max(-0.95, Math.min(0.95, right * duckGain));
+
+    const offset = 44 + i * 4;
+    buffer.writeInt16LE(Math.floor(outL * 32767), offset);
+    buffer.writeInt16LE(Math.floor(outR * 32767), offset + 2);
+  }
+
+  fs.writeFileSync(outWavPath, buffer);
+}
+
+// ============================================================================
+// PENGGABUNGAN AUDIO MASTER (VOICEOVER + SFX TANPA TABRAKAN, TANPA ATEMPO=1.18)
+// ============================================================================
+function buildMasterAudioTrack(totalDurationSec, sfxWavPath, masterAudioPath) {
+  console.log("=== [3/4] MENGGABUNGKAN TRACK VOICEOVER & SFX DENGAN FFMPEG ===");
+  const inputs = ["-y", "-i", sfxWavPath];
+  const filterParts = [];
+  const mixLabels = ["[0:a]"];
+
+  for (let i = 0; i < SCENES.length; i++) {
+    const sc = SCENES[i];
+    inputs.push("-i", sc.voicePath);
+    const delayMs = Math.round(sc.voiceStartTime * 1000);
+    const inIdx = i + 1;
+    // Gunakan adelay presisi milidetik & volume boost jernih (tanpa atempo=1.18)
+    filterParts.push(
+      `[${inIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.35,adelay=${delayMs}|${delayMs}[v${i}]`
+    );
+    mixLabels.push(`[v${i}]`);
+  }
+
+  const totalInputsCount = SCENES.length + 1;
+  filterParts.push(
+    `${mixLabels.join("")}amix=inputs=${totalInputsCount}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]`
+  );
+
+  const filterComplex = filterParts.join(";");
+  execFileSync("ffmpeg", [
+    ...inputs,
+    "-filter_complex",
+    filterComplex,
+    "-map",
+    "[aout]",
+    "-t",
+    totalDurationSec.toFixed(3),
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    masterAudioPath
+  ]);
+}
+
+// ============================================================================
+// ENGINE GRAFIS & ANIMASI MANUSIA, FISIKA NUKLIR, DAN CHERNOBYL (60 FPS)
+// ============================================================================
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
 }
 
 function lerp(a, b, t) {
   return a + (b - a) * clamp(t, 0, 1);
 }
 
-function easeInOutCubic(t) {
-  const c = clamp(t, 0, 1);
+function easeInOutCubic(x) {
+  const c = clamp(x, 0, 1);
   return c < 0.5 ? 4 * c * c * c : 1 - Math.pow(-2 * c + 2, 3) / 2;
 }
 
-function easeOutBack(t) {
-  const c = clamp(t, 0, 1);
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(c - 1, 3) + c1 * Math.pow(c - 1, 2);
-}
-
-function subProgress(t, startRatio, endRatio) {
-  if (t <= startRatio) return 0;
-  if (t >= endRatio) return 1;
-  return (t - startRatio) / (endRatio - startRatio);
-}
-
-// Inverse Kinematics 2-Tulang untuk Lengan Instruktur (Bahu -> Siku -> Tangan)
-function solveArmIK(shoulderX, shoulderY, targetX, targetY, upperLen, lowerLen, bendDirection = 1) {
-  let dx = targetX - shoulderX;
-  let dy = targetY - shoulderY;
-  let dist = Math.hypot(dx, dy);
-  const maxReach = upperLen + lowerLen - 2;
-  const minReach = Math.abs(upperLen - lowerLen) + 2;
-
-  if (dist > maxReach) {
-    const scale = maxReach / dist;
-    dx *= scale;
-    dy *= scale;
-    dist = maxReach;
-  } else if (dist < minReach) {
-    const scale = minReach / (dist || 1);
-    dx *= scale;
-    dy *= scale;
-    dist = minReach;
-  }
-
-  const baseAngle = Math.atan2(dy, dx);
-  const cosAngle = clamp(
-    (upperLen * upperLen + dist * dist - lowerLen * lowerLen) / (2 * upperLen * dist),
-    -1,
-    1
-  );
-  const offsetAngle = Math.acos(cosAngle) * bendDirection;
-  const shoulderAngle = baseAngle + offsetAngle;
-
-  const elbowX = shoulderX + Math.cos(shoulderAngle) * upperLen;
-  const elbowY = shoulderY + Math.sin(shoulderAngle) * upperLen;
-  const handX = shoulderX + dx;
-  const handY = shoulderY + dy;
-
-  return { elbowX, elbowY, handX, handY };
-}
-
-// ============================================================================
-// DATA KURIKULUM & NARASI (10 SEGMEN TERSTRUKTUR = ~180 DETIK / 3 MENIT)
-// ============================================================================
-const SEGMENTS = [
-  {
-    id: "intro",
-    targetDuration: 17.0,
-    narration:
-      "Halo rekan-rekan teknik! Selamat datang di kelas Gambar Teknik. Hari ini kita akan membedah tuntas tiga proyeksi piktorial utama: Proyeksi Isometri, Proyeksi Dimetri, dan Proyeksi Miring, lengkap dengan rumus sudut, skala, serta cara mudah mengubah satu proyeksi ke proyeksi lainnya.",
-    boardPhase: "intro_overview"
-  },
-  {
-    id: "concept_3d",
-    targetDuration: 18.0,
-    narration:
-      "Sebagai studi kasus nyata, perhatikan komponen balok bertingkat ini. Benda kerja memiliki ukuran asli: panjang sumbu X enam puluh milimeter, kedalaman sumbu Y empat puluh milimeter, dan tinggi sumbu Z lima puluh milimeter. Bagaimana cara menggambarnya di kertas dua dimensi?",
-    boardPhase: "object_dims"
-  },
-  {
-    id: "isometri_axes",
-    targetDuration: 18.0,
-    narration:
-      "Pertama, Proyeksi Isometri. Kata isometri berarti ukuran yang sama. Pada proyeksi ini, sumbu X di kiri dan sumbu Y di kanan sama-sama dimiringkan tiga puluh derajat terhadap garis mendatar, sedangkan sumbu Z tegak lurus sembilan puluh derajat. Sudut antar ketiganya tepat seratus dua puluh derajat.",
-    boardPhase: "iso_axes"
-  },
-  {
-    id: "isometri_draw",
-    targetDuration: 18.0,
-    narration:
-      "Karena perbandingan skala sumbu X banding Y banding Z adalah satu banding satu banding satu, semua ukuran digambar utuh. Panjang tetap enam puluh milimeter, kedalaman tetap empat puluh milimeter, dan tinggi tetap lima puluh milimeter. Sangat cocok untuk menampilkan ketiga sisi secara seimbang.",
-    boardPhase: "iso_complete"
-  },
-  {
-    id: "dimetri_axes",
-    targetDuration: 18.0,
-    narration:
-      "Kedua, Proyeksi Dimetri. Pada gambar isometri, terkadang sudut garis tampak saling berimpit. Proyeksi Dimetri mengatasi hal ini dengan memakai dua sudut berbeda: sumbu X dimiringkan landai tujuh derajat, sedangkan sumbu kedalaman Y dimiringkan empat puluh dua derajat terhadap garis mendatar.",
-    boardPhase: "dim_axes"
-  },
-  {
-    id: "dimetri_draw",
-    targetDuration: 18.0,
-    narration:
-      "Aturan penting pada Proyeksi Dimetri adalah skala sumbunya, yaitu satu banding setengah banding satu. Artinya, ukuran sumbu X tetap enam puluh milimeter dan tinggi Z tetap lima puluh milimeter, tetapi ukuran kedalaman pada sumbu Y wajib dikalikan setengah, dari empat puluh menjadi dua puluh milimeter.",
-    boardPhase: "dim_complete"
-  },
-  {
-    id: "oblique_draw",
-    targetDuration: 19.0,
-    narration:
-      "Ketiga, Proyeksi Miring atau Oblique. Di sini sumbu X dibuat mendatar nol derajat dan sumbu Z tegak sembilan puluh derajat, sehingga tampak depan tergambar siku-siku persis ukuran asli. Sumbu kedalaman Y ditarik miring empat puluh lima derajat. Tipe Cavalier memakai skala penuh, sedangkan Cabinet memakai skala setengah.",
-    boardPhase: "oblique_complete"
-  },
-  {
-    id: "convert_iso_to_dim",
-    targetDuration: 18.0,
-    narration:
-      "Sekarang, bagaimana cara mengubah Proyeksi Isometri menjadi Dimetri? Langkah pertama: turunkan kemiringan sumbu X dari tiga puluh derajat menjadi tujuh derajat. Langkah kedua: naikkan sumbu Y dari tiga puluh derajat menjadi empat puluh dua derajat. Langkah ketiga: pangkas panjang garis sumbu Y menjadi separuhnya, yakni dua puluh milimeter.",
-    boardPhase: "morph_iso_to_dim"
-  },
-  {
-    id: "convert_dim_to_oblique",
-    targetDuration: 18.0,
-    narration:
-      "Selanjutnya, cara mengubah Proyeksi Dimetri menjadi Proyeksi Miring tipe Cabinet. Pertama, rebahkan sumbu X dari tujuh derajat hingga rata nol derajat agar bidang depan menjadi tegak lurus. Kedua, geser sudut sumbu Y dari empat puluh dua derajat ke empat puluh lima derajat, dengan skala kedalaman tetap setengah.",
-    boardPhase: "morph_dim_to_obl"
-  },
-  {
-    id: "convert_summary",
-    targetDuration: 18.0,
-    narration:
-      "Jika ingin mengembalikannya ke Isometri, cukup angkat kembali sumbu X ke tiga puluh derajat, turunkan sumbu Y ke tiga puluh derajat, dan kembalikan skala kedalaman menjadi satu penuh. Dengan memahami tabel sudut dan skala sumbu ini, Anda dapat mengonversi proyeksi gambar teknik dengan cepat dan akurat!",
-    boardPhase: "final_comparison"
-  }
-];
-
-// ============================================================================
-// MESIN GEOMETRI 3D KOMPONEN L-BLOCK (BALOK BERTINGKAT TEKNIK MESIN)
-// Ukuran asli (mm): L (X) = 60, W (Y) = 40, H (Z) = 50
-// Bentuk L-Block:
-// - Alas penuh X: 0..60, Y: 0..40, Z: 0..22
-// - Menara belakang/kiri X: 0..26, Y: 0..40, Z: 22..50
-// ============================================================================
-const LBLOCK_VERTICES = [
-  // Lantai bawah Z = 0
-  { id: 0, x: 0, y: 0, z: 0 },     // Titik asal depan-bawah-tengah
-  { id: 1, x: 60, y: 0, z: 0 },    // Ujung X depan
-  { id: 2, x: 60, y: 40, z: 0 },   // Ujung X-Y kanan belakang
-  { id: 3, x: 0, y: 40, z: 0 },    // Ujung Y belakang
-  // Tingkat tengah Z = 22
-  { id: 4, x: 60, y: 0, z: 22 },
-  { id: 5, x: 60, y: 40, z: 22 },
-  { id: 6, x: 26, y: 0, z: 22 },
-  { id: 7, x: 26, y: 40, z: 22 },
-  // Puncak atas Z = 50
-  { id: 8, x: 26, y: 0, z: 50 },
-  { id: 9, x: 26, y: 40, z: 50 },
-  { id: 10, x: 0, y: 40, z: 50 },
-  { id: 11, x: 0, y: 0, z: 50 }
-];
-
-// Daftar poligon permukaan untuk pewarnaan shading teknik
-const LBLOCK_FACES = [
-  // Sisi belakang/kiri (bidang X-Z pada Y=40 & bidang Y-Z pada X=0) - digambar lebih dulu
-  { verts: [0, 3, 10, 11], color: "rgba(56, 189, 248, 0.14)", stroke: "#0284c7", hidden: true },
-  // Bidang depan menghadap X-Z (Y = 0) -> Wajah Utama Depan
-  { verts: [0, 1, 4, 6, 8, 11], color: "rgba(37, 99, 235, 0.24)", stroke: "#1d4ed8", hidden: false },
-  // Bidang samping kanan bawah menghadap Y-Z (X = 60)
-  { verts: [1, 2, 5, 4], color: "rgba(14, 165, 233, 0.30)", stroke: "#0369a1", hidden: false },
-  // Bidang injakan horizontal tengah (Z = 22, X = 26..60)
-  { verts: [6, 4, 5, 7], color: "rgba(96, 165, 250, 0.35)", stroke: "#1e40af", hidden: false },
-  // Bidang tegak menara tengah menghadap Y-Z (X = 26, Z = 22..50)
-  { verts: [6, 7, 9, 8], color: "rgba(14, 165, 233, 0.28)", stroke: "#0369a1", hidden: false },
-  // Bidang atap puncak horizontal (Z = 50, X = 0..26)
-  { verts: [11, 8, 9, 10], color: "rgba(147, 197, 253, 0.42)", stroke: "#1e3a8a", hidden: false },
-  // Bidang belakang menghadap X-Z (Y = 40) - tepi luar terlihat sebagian
-  { verts: [3, 2, 5, 7, 9, 10], color: "rgba(59, 130, 246, 0.10)", stroke: "#1d4ed8", hidden: false }
-];
-
-// Garis rusuk utama (visible edges) dan garis putus-putus (hidden edges)
-const LBLOCK_VISIBLE_EDGES = [
-  [0, 1], [1, 4], [4, 6], [6, 8], [8, 11], [11, 0], // Profil L depan
-  [1, 2], [2, 5], [4, 5],                           // Kotak kanan bawah
-  [6, 7], [5, 7],                                   // Injakan tengah
-  [8, 9], [7, 9],                                   // Dinding vertikal tengah
-  [11, 10], [10, 9]                                 // Atap atas
-];
-
-const LBLOCK_HIDDEN_EDGES = [
-  [0, 3], [3, 2], [3, 10]                           // Rusuk belakang yang tertutup
-];
-
-/**
- * Proyeksi Titik 3D (x, y, z) ke Layar 2D Papan Tulis
- * @param {number} x Panjang sepanjang sumbu X (mm) - mengarah ke kiri-atas/depan-kiri
- * @param {number} y Kedalaman sepanjang sumbu Y (mm) - mengarah ke kanan-atas
- * @param {number} z Tinggi sepanjang sumbu Z (mm) - mengarah vertikal ke atas
- * @param {object} config { originX, originY, alphaDeg, betaDeg, sx, sy, sz, unitScale }
- */
-function project3D(x, y, z, config) {
-  const {
-    originX,
-    originY,
-    alphaDeg, // Sudut sumbu X terhadap horizontal (ke arah kiri-atas)
-    betaDeg,  // Sudut sumbu Y terhadap horizontal (ke arah kanan-atas)
-    sx,
-    sy,
-    sz,
-    unitScale
-  } = config;
-
-  const alpha = alphaDeg * DEG2RAD;
-  const beta = betaDeg * DEG2RAD;
-
-  const dxX = -Math.cos(alpha) * (x * sx * unitScale);
-  const dyX = -Math.sin(alpha) * (x * sx * unitScale);
-
-  const dxY = Math.cos(beta) * (y * sy * unitScale);
-  const dyY = -Math.sin(beta) * (y * sy * unitScale);
-
-  const dyZ = -(z * sz * unitScale);
-
-  return {
-    x: originX + dxX + dxY,
-    y: originY + dyX + dyY + dyZ
-  };
-}
-
-// ============================================================================
-// FUNGSI AUDIO TTS & PROBING DURASI PRESISI
-// ============================================================================
-function getAudioDuration(filePath) {
-  try {
-    const out = execSync(
-      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`,
-      { encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] }
-    ).trim();
-    const val = parseFloat(out);
-    return Number.isFinite(val) && val > 0 ? val : 0;
-  } catch (e) {
-    return 0;
-  }
-}
-
-function generateSilentFallbackAudio(filePath, durationSec) {
-  execSync(
-    `ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t ${durationSec.toFixed(3)} -q:a 9 -acodec libmp3lame "${filePath}"`,
-    { stdio: "ignore" }
-  );
-}
-
-async function prepareAudioAndTimeline() {
-  console.log("=== [1/3] Membuat Audio Narasi & Menghitung Timeline Presisi ===");
-  const timeline = [];
-  let currentStart = 0;
-
-  for (let i = 0; i < SEGMENTS.length; i++) {
-    const seg = SEGMENTS[i];
-    const rawVoicePath = path.join(TEMP_DIR, `voice_raw_${i}.mp3`);
-    const paddedSegAudioPath = path.join(TEMP_DIR, `voice_seg_${i}.wav`);
-
-    let voiceDuration = 0;
-    if (typeof global.generateStudioVoice === "function") {
-      try {
-        await global.generateStudioVoice(seg.narration, rawVoicePath, VOICE_MODEL);
-        voiceDuration = getAudioDuration(rawVoicePath);
-      } catch (err) {
-        console.warn(`Peringatan TTS segmen ${i}:`, err.message);
-      }
-    }
-
-    if (!fs.existsSync(rawVoicePath) || voiceDuration <= 0.1) {
-      // Fallback aman apabila dijalankan di lingkungan pengujian tanpa server TTS
-      voiceDuration = Math.max(8.0, seg.targetDuration - 1.5);
-      generateSilentFallbackAudio(rawVoicePath, voiceDuration);
-    }
-
-    // Pastikan tidak ada tabrakan suara: beri jeda napas minimal 1.2 detik antar segmen
-    const segDuration = Math.max(seg.targetDuration, voiceDuration + 1.2);
-
-    timeline.push({
-      index: i,
-      ...seg,
-      rawVoicePath,
-      paddedSegAudioPath,
-      voiceDuration,
-      duration: segDuration,
-      startTime: currentStart,
-      endTime: currentStart + segDuration
-    });
-
-    currentStart += segDuration;
-  }
-
-  // Jika total durasi kurang dari 180 detik (3 menit), distribusikan sisa waktu secara proporsional
-  const TARGET_TOTAL_SECONDS = 180.0;
-  if (currentStart < TARGET_TOTAL_SECONDS) {
-    const extraPerSeg = (TARGET_TOTAL_SECONDS - currentStart) / timeline.length;
-    let accum = 0;
-    for (const item of timeline) {
-      item.startTime = accum;
-      item.duration += extraPerSeg;
-      item.endTime = accum + item.duration;
-      accum = item.endTime;
-    }
-  }
-
-  const totalDuration = timeline[timeline.length - 1].endTime;
-
-  // Buat file WAV per segmen dengan durasi eksak (suara + hening di akhir segmen) agar 100% bebas tabrakan
-  const concatListPath = path.join(TEMP_DIR, "audio_concat.txt");
-  const concatLines = [];
-
-  for (const item of timeline) {
-    const padDur = Math.max(0.1, item.duration - item.voiceDuration);
-    execSync(
-      `ffmpeg -y -i "${item.rawVoicePath}" -f lavfi -t ${padDur.toFixed(3)} -i anullsrc=r=44100:cl=stereo -filter_complex "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];[a0][a1]concat=n=2:v=0:a=1[out]" -map "[out]" -t ${item.duration.toFixed(3)} "${item.paddedSegAudioPath}"`,
-      { stdio: "ignore" }
-    );
-    concatLines.push(`file '${item.paddedSegAudioPath.replace(/'/g, "'\\''")}'`);
-  }
-
-  fs.writeFileSync(concatListPath, concatLines.join("\n"), "utf8");
-  const masterAudioPath = path.join(TEMP_DIR, "master_audio.wav");
-  execSync(
-    `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${masterAudioPath}"`,
-    { stdio: "ignore" }
-  );
-
-  console.log(`Total durasi video: ${totalDuration.toFixed(2)} detik (${timeline.length} segmen).`);
-  return { timeline, totalDuration, masterAudioPath };
-}
-
-// ============================================================================
-// PENGGAMBARAN ELEMEN VISUAL PAPAN TULIS & GEOMETRI TEKNIK
-// ============================================================================
 function drawRoundedRect(ctx, x, y, w, h, r) {
   const radius = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
@@ -385,1391 +646,1743 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function drawArrow(ctx, x1, y1, x2, y2, color = "#0f172a", lineWidth = 3, headLen = 12, bothEnds = false) {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.hypot(dx, dy);
-  if (len < 1) return;
-  const angle = Math.atan2(dy, dx);
+/**
+ * Menggambar Karakter Manusia Artikulasi Penuh (Kepala, Ekspresi, Lip-Sync,
+ * Kacamata/Topi Operator/Masker Hazmat, Torso, Tangan Bersendi, Kaki Berjalan, & Properti)
+ */
+function drawArticulatedHuman(ctx, opts) {
+  const {
+    x,
+    y,
+    scale = 1.0,
+    role = "scientist", // "scientist" | "operator" | "firefighter" | "liquidator"
+    emotion = "normal", // "normal" | "excited" | "shocked" | "panicked" | "somber"
+    isSpeaking = false,
+    speechPhase = 0,
+    time = 0,
+    walkSpeed = 0,
+    pointAngle = -0.5,
+    prop = "none", // "atom_orb" | "pointer" | "clipboard" | "geiger" | "az5_hand"
+    facing = 1
+  } = opts;
 
   ctx.save();
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.lineCap = "round";
+  ctx.translate(x, y);
+  ctx.scale(scale * facing, scale);
 
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
+  // Gerakan bernapas & berjalan
+  const breath = Math.sin(time * 2.6) * 3.5;
+  const walkCycle = walkSpeed > 0 ? Math.sin(time * 6.5) * walkSpeed : 0;
+  const bodyBob = Math.abs(walkCycle) * 6;
 
-  // Panah ujung akhir
+  ctx.translate(0, -bodyBob + breath);
+
+  // Warna pakaian berdasarkan peran cerita
+  let coatColor = "#f1f5f9";
+  let shirtColor = "#1e293b";
+  let tieColor = "#0ea5e9";
+  let pantsColor = "#0f172a";
+  let skinColor = "#f4c29f";
+
+  if (role === "operator") {
+    coatColor = "#e2e8f0";
+    shirtColor = "#334155";
+    tieColor = "#dc2626";
+    pantsColor = "#1e293b";
+  } else if (role === "firefighter") {
+    coatColor = "#9a3412";
+    shirtColor = "#431407";
+    tieColor = "#facc15";
+    pantsColor = "#7c2d12";
+  } else if (role === "liquidator") {
+    coatColor = "#3f6212";
+    shirtColor = "#1a2e05";
+    tieColor = "#eab308";
+    pantsColor = "#365314";
+  }
+
+  // Bayangan lantai di bawah kaki
+  ctx.save();
+  ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
   ctx.beginPath();
-  ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
-  ctx.closePath();
+  ctx.ellipse(0, 210 + bodyBob - breath, 68, 16, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
 
-  if (bothEnds) {
+  // ---- KAKI BELAKANG & DEPAN (Berjalan / Berdiri) ----
+  const drawLeg = (hipX, phaseOffset, isFront) => {
+    const swing = Math.sin(time * 6.5 + phaseOffset) * 0.35 * walkSpeed;
+    const kneeBend = Math.max(0, Math.cos(time * 6.5 + phaseOffset)) * 0.3 * walkSpeed;
+
+    ctx.save();
+    ctx.translate(hipX, 75);
+    ctx.rotate(swing);
+
+    // Paha
+    ctx.strokeStyle = isFront ? pantsColor : "#090d16";
+    ctx.lineWidth = 24;
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x1 + headLen * Math.cos(angle - Math.PI / 6), y1 + headLen * Math.sin(angle - Math.PI / 6));
-    ctx.lineTo(x1 + headLen * Math.cos(angle + Math.PI / 6), y1 + headLen * Math.sin(angle + Math.PI / 6));
-    ctx.closePath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, 65);
+    ctx.stroke();
+
+    // Betis & Sepatu
+    ctx.translate(0, 65);
+    ctx.rotate(kneeBend);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, 62);
+    ctx.stroke();
+
+    // Sepatu
+    ctx.fillStyle = "#111827";
+    drawRoundedRect(ctx, -12, 55, 38, 18, 8);
     ctx.fill();
-  }
-  ctx.restore();
-}
-
-// Menggambar Sumbu Proyeksi + Busur Sudut Derajat (Protractor Arc)
-function drawProjectionAxes(ctx, config, progress = 1, showAngles = true) {
-  if (progress <= 0) return null;
-  const { originX, originY, alphaDeg, betaDeg, axisLength = 190 } = config;
-  const p = easeInOutCubic(progress);
-
-  const alpha = alphaDeg * DEG2RAD;
-  const beta = betaDeg * DEG2RAD;
-
-  ctx.save();
-  // Garis bantu horizontal titik-titik
-  ctx.strokeStyle = "#64748b";
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 6]);
-  ctx.beginPath();
-  ctx.moveTo(originX - axisLength * 0.95 * p, originY);
-  ctx.lineTo(originX + axisLength * 0.95 * p, originY);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Sumbu X (Kiri - Merah Bata/Oranye Teknik)
-  const xEnd = {
-    x: originX - Math.cos(alpha) * axisLength * p,
-    y: originY - Math.sin(alpha) * axisLength * p
-  };
-  drawArrow(ctx, originX, originY, xEnd.x, xEnd.y, "#dc2626", 3.5, 13);
-
-  // Sumbu Y (Kanan - Hijau Zamrud Teknik)
-  const yEnd = {
-    x: originX + Math.cos(beta) * axisLength * p,
-    y: originY - Math.sin(beta) * axisLength * p
-  };
-  drawArrow(ctx, originX, originY, yEnd.x, yEnd.y, "#059669", 3.5, 13);
-
-  // Sumbu Z (Vertikal Atas - Ungu/Biru Tua)
-  const zEnd = {
-    x: originX,
-    y: originY - axisLength * 0.95 * p
-  };
-  drawArrow(ctx, originX, originY, zEnd.x, zEnd.y, "#7c3aed", 3.5, 13);
-
-  // Label Sumbu X, Y, Z
-  ctx.font = "bold 20px sans-serif";
-  ctx.fillStyle = "#dc2626";
-  ctx.fillText("X (Panjang)", xEnd.x - 95, xEnd.y - 10);
-  ctx.fillStyle = "#059669";
-  ctx.fillText("Y (Kedalaman)", yEnd.x + 10, yEnd.y - 8);
-  ctx.fillStyle = "#7c3aed";
-  ctx.fillText("Z (Tinggi)", zEnd.x - 42, zEnd.y - 14);
-
-  // Busur Sudut Alpha (Kiri) & Beta (Kanan)
-  if (showAngles && p > 0.6) {
-    const arcRadius = 72;
-
-    // Busur Alpha (Kiri: dari 180 deg ke 180 + alphaDeg)
-    if (alphaDeg >= 0.5) {
-      ctx.strokeStyle = "#dc2626";
-      ctx.fillStyle = "rgba(220, 38, 38, 0.12)";
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(originX, originY);
-      ctx.arc(originX, originY, arcRadius, Math.PI, Math.PI + alpha, false);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      const midA = Math.PI + alpha / 2;
-      ctx.fillStyle = "#b91c1c";
-      ctx.font = "bold 19px sans-serif";
-      ctx.fillText(
-        `α = ${Math.round(alphaDeg)}°`,
-        originX + Math.cos(midA) * (arcRadius + 58) - 24,
-        originY + Math.sin(midA) * (arcRadius + 24) + 5
-      );
-    } else {
-      ctx.fillStyle = "#b91c1c";
-      ctx.font = "bold 19px sans-serif";
-      ctx.fillText("α = 0° (Mendatar)", originX - 165, originY + 28);
-    }
-
-    // Busur Beta (Kanan: dari -beta ke 0)
-    ctx.strokeStyle = "#059669";
-    ctx.fillStyle = "rgba(5, 150, 105, 0.12)";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(originX, originY);
-    ctx.arc(originX, originY, arcRadius, -beta, 0, false);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    const midB = -beta / 2;
-    ctx.fillStyle = "#047857";
-    ctx.font = "bold 19px sans-serif";
-    ctx.fillText(
-      `β = ${Math.round(betaDeg)}°`,
-      originX + Math.cos(midB) * (arcRadius + 16),
-      originY + Math.sin(midB) * (arcRadius + 20) + 5
-    );
-  }
-
-  ctx.restore();
-  return yEnd;
-}
-
-// Menggambar Objek 3D L-Block dengan Progres Garis Demi Garis & Dimensi Ukuran
-function drawProjectedLBlock(ctx, config, drawProgress = 1, showDimensions = true) {
-  if (drawProgress <= 0) return { x: config.originX, y: config.originY };
-  const pts = LBLOCK_VERTICES.map((v) => project3D(v.x, v.y, v.z, config));
-
-  ctx.save();
-
-  // 1. Gambar Poligon Permukaan (Muncul halus saat garis hampir selesai)
-  const faceAlpha = subProgress(drawProgress, 0.35, 0.95);
-  if (faceAlpha > 0) {
-    ctx.save();
-    ctx.globalAlpha = faceAlpha;
-    for (const face of LBLOCK_FACES) {
-      if (face.hidden) continue;
-      ctx.beginPath();
-      face.verts.forEach((vIdx, idx) => {
-        const pt = pts[vIdx];
-        if (idx === 0) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
-      });
-      ctx.closePath();
-      ctx.fillStyle = face.color;
-      ctx.fill();
-    }
     ctx.restore();
-  }
+  };
 
-  // 2. Gambar Rusuk Tersembunyi (Garis Putus-Putus Tipis)
-  const hiddenProg = subProgress(drawProgress, 0.1, 0.5);
-  if (hiddenProg > 0) {
-    ctx.strokeStyle = "rgba(71, 85, 105, 0.55)";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([7, 6]);
-    for (const [a, b] of LBLOCK_HIDDEN_EDGES) {
-      const p1 = pts[a];
-      const p2 = pts[b];
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(lerp(p1.x, p2.x, hiddenProg), lerp(p1.y, p2.y, hiddenProg));
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
-  }
+  drawLeg(-18, Math.PI, false);
+  drawLeg(18, 0, true);
 
-  // 3. Gambar Rusuk Utama Secara Berurutan (Animasi Tangan Menggambar Nyata)
-  const totalEdges = LBLOCK_VISIBLE_EDGES.length;
-  const edgePhase = clamp(drawProgress / 0.85, 0, 1) * totalEdges;
-  let activeTip = { x: pts[0].x, y: pts[0].y };
-
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 3.6;
+  // ---- LENGAN BELAKANG ----
+  ctx.save();
+  ctx.translate(-36, -42);
+  const backArmAngle = 0.25 + Math.sin(time * 2.2) * 0.08 - walkCycle * 0.3;
+  ctx.rotate(backArmAngle);
+  ctx.strokeStyle = coatColor;
+  ctx.lineWidth = 20;
   ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  for (let i = 0; i < totalEdges; i++) {
-    const localP = clamp(edgePhase - i, 0, 1);
-    if (localP <= 0) break;
-    const [a, b] = LBLOCK_VISIBLE_EDGES[i];
-    const p1 = pts[a];
-    const p2 = pts[b];
-    const curX = lerp(p1.x, p2.x, localP);
-    const curY = lerp(p1.y, p2.y, localP);
-
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(curX, curY);
-    ctx.stroke();
-
-    activeTip = { x: curX, y: curY };
-  }
-
-  // 4. Gambar Garis Ukur (Dimension Lines) beserta Nilai Ukuran (mm)
-  if (showDimensions && drawProgress > 0.75) {
-    const dimAlpha = subProgress(drawProgress, 0.75, 1.0);
-    ctx.save();
-    ctx.globalAlpha = dimAlpha;
-
-    const drawnL = Math.round(60 * config.sx);
-    const drawnW = Math.round(40 * config.sy);
-    const drawnH = Math.round(50 * config.sz);
-
-    // Garis ukur Panjang X (dari titik 0 ke titik 1, digeser sedikit ke bawah)
-    const offX = 28;
-    const p0 = pts[0];
-    const p1 = pts[1];
-    drawArrow(ctx, p0.x, p0.y + offX, p1.x, p1.y + offX, "#dc2626", 2.2, 9, true);
-    ctx.fillStyle = "#b91c1c";
-    ctx.font = "bold 17px sans-serif";
-    ctx.fillText(
-      `L = ${drawnL} mm (${config.sx === 1 ? "100%" : "50%"})`,
-      (p0.x + p1.x) / 2 - 65,
-      (p0.y + p1.y) / 2 + offX + 24
-    );
-
-    // Garis ukur Kedalaman Y (dari titik 1 ke titik 2, digeser ke kanan-bawah)
-    const p2 = pts[2];
-    drawArrow(ctx, p1.x + 22, p1.y + 16, p2.x + 22, p2.y + 16, "#059669", 2.2, 9, true);
-    ctx.fillStyle = "#047857";
-    ctx.fillText(
-      `W = ${drawnW} mm (${config.sy === 1 ? "Skala 1" : "Skala 1/2"})`,
-      (p1.x + p2.x) / 2 + 28,
-      (p1.y + p2.y) / 2 + 26
-    );
-
-    // Garis ukur Tinggi Z (dari titik 0 ke titik 11)
-    const p11 = pts[11];
-    drawArrow(ctx, p0.x - 26, p0.y, p11.x - 26, p11.y, "#7c3aed", 2.2, 9, true);
-    ctx.fillStyle = "#6d28d9";
-    ctx.fillText(
-      `H = ${drawnH} mm`,
-      p11.x - 118,
-      (p0.y + p11.y) / 2 + 5
-    );
-
-    ctx.restore();
-  }
-
-  ctx.restore();
-  return activeTip;
-}
-
-// Menggambar Kartu Rumus / Info Ringkas di Dalam Papan Tulis
-function drawBoardNoteCard(ctx, x, y, w, h, title, lines, accentColor = "#2563eb", appearProg = 1) {
-  if (appearProg <= 0) return;
-  const p = easeOutBack(appearProg);
-
-  ctx.save();
-  ctx.translate(x + w / 2, y + h / 2);
-  ctx.scale(p, p);
-  ctx.translate(-(x + w / 2), -(y + h / 2));
-
-  // Bayangan lembut kartu
-  ctx.fillStyle = "rgba(15, 23, 42, 0.08)";
-  drawRoundedRect(ctx, x + 4, y + 6, w, h, 14);
-  ctx.fill();
-
-  // Latar kartu putih gading bersih
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = accentColor;
-  ctx.lineWidth = 3;
-  drawRoundedRect(ctx, x, y, w, h, 14);
-  ctx.fill();
-  ctx.stroke();
-
-  // Pita aksen kiri
-  ctx.fillStyle = accentColor;
-  drawRoundedRect(ctx, x, y, 12, h, 6);
-  ctx.fill();
-
-  // Judul kartu
-  ctx.fillStyle = accentColor;
-  ctx.font = "bold 22px sans-serif";
-  ctx.fillText(title, x + 26, y + 36);
-
-  // Isi baris
-  ctx.fillStyle = "#1e293b";
-  ctx.font = "19px sans-serif";
-  lines.forEach((line, i) => {
-    ctx.fillText(line, x + 26, y + 70 + i * 30);
-  });
-
-  ctx.restore();
-}
-
-// ============================================================================
-// PENGGAMBARAN RUANGAN STUDIO & PAPAN TULIS INTERAKTIF
-// ============================================================================
-function drawStudioAndWhiteboardShell(ctx) {
-  // Dinding studio teknik (gradasi abu-biru gelap hangat agar papan tulis putih menonjol tajam)
-  const wallGrad = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-  wallGrad.addColorStop(0, "#1e293b");
-  wallGrad.addColorStop(0.82, "#0f172a");
-  wallGrad.addColorStop(0.821, "#334155");
-  wallGrad.addColorStop(1, "#1e293b");
-  ctx.fillStyle = wallGrad;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-  // Garis lantai kayu studio
-  ctx.fillStyle = "#273549";
-  ctx.fillRect(0, 910, WIDTH, 170);
-  ctx.strokeStyle = "#475569";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0, 910);
-  ctx.lineTo(WIDTH, 910);
-  ctx.stroke();
-
-  // Papan Tulis Besar (x: 340..1850, y: 55..885)
-  const bx = 340;
-  const by = 55;
-  const bw = 1510;
-  const bh = 830;
-
-  // Bayangan papan tulis di dinding
-  ctx.fillStyle = "rgba(0, 0, 0, 0.38)";
-  drawRoundedRect(ctx, bx + 10, by + 14, bw, bh, 18);
-  ctx.fill();
-
-  // Bingkai Aluminium Perak
-  const frameGrad = ctx.createLinearGradient(bx, by, bx, by + bh);
-  frameGrad.addColorStop(0, "#cbd5e1");
-  frameGrad.addColorStop(0.5, "#94a3b8");
-  frameGrad.addColorStop(1, "#64748b");
-  ctx.fillStyle = frameGrad;
-  drawRoundedRect(ctx, bx - 12, by - 12, bw + 24, bh + 24, 18);
-  ctx.fill();
-
-  // Permukaan Papan Tulis Putih Bersih
-  ctx.fillStyle = "#f8fafc";
-  drawRoundedRect(ctx, bx, by, bw, bh, 10);
-  ctx.fill();
-
-  // Grid milimeter blok halus di papan tulis (khas gambar teknik)
-  ctx.save();
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.22)";
-  ctx.lineWidth = 1;
-  const gridStep = 35;
-  for (let gx = bx + gridStep; gx < bx + bw; gx += gridStep) {
-    ctx.beginPath();
-    ctx.moveTo(gx, by);
-    ctx.lineTo(gx, by + bh);
-    ctx.stroke();
-  }
-  for (let gy = by + gridStep; gy < by + bh; gy += gridStep) {
-    ctx.beginPath();
-    ctx.moveTo(bx, gy);
-    ctx.lineTo(bx + bw, gy);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // Rak Spidol & Penghapus di Bawah Papan Tulis
-  ctx.fillStyle = "#475569";
-  ctx.fillRect(bx + 120, by + bh + 8, bw - 240, 14);
-  // Spidol Merah, Biru, Hijau, Penghapus
-  ctx.fillStyle = "#dc2626";
-  ctx.fillRect(bx + 260, by + bh + 2, 48, 7);
-  ctx.fillStyle = "#2563eb";
-  ctx.fillRect(bx + 320, by + bh + 2, 48, 7);
-  ctx.fillStyle = "#059669";
-  ctx.fillRect(bx + 380, by + bh + 2, 48, 7);
-  ctx.fillStyle = "#1e293b";
-  ctx.fillRect(bx + 460, by + bh - 4, 70, 13);
-
-  return { bx, by, bw, bh };
-}
-
-// ============================================================================
-// PENGGAMBARAN KONTEN PAPAN TULIS BERDASARKAN FASE SEGMEN
-// Mengembalikan koordinat { targetX, targetY, mode } untuk ditunjuk/digambar instruktur
-// ============================================================================
-function renderWhiteboardContent(ctx, phase, segProgress, globalTime) {
-  const bx = 340;
-  const by = 55;
-  let pointerTarget = { x: bx + 420, y: by + 400, isDrawing: false };
-
-  // Judul Materi di Dalam Papan Tulis (Bukan banner atas layar, melainkan tulisan spidol di papan)
-  ctx.save();
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "bold 30px sans-serif";
-
-  if (phase === "intro_overview") {
-    ctx.fillText("GAMBAR TEKNIK: PROYEKSI PIKTORIAL 3D → 2D", bx + 45, by + 58);
-    ctx.strokeStyle = "#2563eb";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(bx + 45, by + 72);
-    ctx.lineTo(bx + 760, by + 72);
-    ctx.stroke();
-
-    // Tampilkan 3 kartu pratinjau proyeksi secara bertahap
-    const p1 = subProgress(segProgress, 0.08, 0.35);
-    const p2 = subProgress(segProgress, 0.35, 0.65);
-    const p3 = subProgress(segProgress, 0.65, 0.92);
-
-    // 1. Pratinjau Isometri
-    if (p1 > 0) {
-      drawBoardNoteCard(
-        ctx,
-        bx + 50,
-        by + 110,
-        440,
-        155,
-        "1. Proyeksi Isometri",
-        [
-          "• Sudut Sumbu: α = 30° | β = 30°",
-          "• Skala X : Y : Z = 1 : 1 : 1",
-          "• Ketiga sisi tampil seimbang utuh"
-        ],
-        "#2563eb",
-        p1
-      );
-      const tip1 = drawProjectedLBlock(
-        ctx,
-        { originX: bx + 270, originY: by + 620, alphaDeg: 30, betaDeg: 30, sx: 1, sy: 1, sz: 1, unitScale: 3.2 },
-        p1,
-        false
-      );
-      pointerTarget = { x: tip1.x, y: tip1.y, isDrawing: p1 < 0.95 };
-    }
-
-    // 2. Pratinjau Dimetri
-    if (p2 > 0) {
-      drawBoardNoteCard(
-        ctx,
-        bx + 535,
-        by + 110,
-        440,
-        155,
-        "2. Proyeksi Dimetri",
-        [
-          "• Sudut Sumbu: α = 7° | β = 42°",
-          "• Skala X : Y : Z = 1 : 1/2 : 1",
-          "• Sumbu kedalaman Y diperpendek 50%"
-        ],
-        "#059669",
-        p2
-      );
-      const tip2 = drawProjectedLBlock(
-        ctx,
-        { originX: bx + 760, originY: by + 620, alphaDeg: 7, betaDeg: 42, sx: 1, sy: 0.5, sz: 1, unitScale: 3.2 },
-        p2,
-        false
-      );
-      pointerTarget = { x: tip2.x, y: tip2.y, isDrawing: p2 < 0.95 };
-    }
-
-    // 3. Pratinjau Proyeksi Miring
-    if (p3 > 0) {
-      drawBoardNoteCard(
-        ctx,
-        bx + 1020,
-        by + 110,
-        440,
-        155,
-        "3. Proyeksi Miring (Oblique)",
-        [
-          "• Sudut Sumbu: α = 0° | β = 45°",
-          "• Skala: Cavalier (1:1:1) / Cabinet (1:½:1)",
-          "• Bidang depan X-Z siku-siku 90° asli"
-        ],
-        "#d97706",
-        p3
-      );
-      const tip3 = drawProjectedLBlock(
-        ctx,
-        { originX: bx + 1270, originY: by + 620, alphaDeg: 0, betaDeg: 45, sx: 1, sy: 0.5, sz: 1, unitScale: 3.2 },
-        p3,
-        false
-      );
-      pointerTarget = { x: tip3.x, y: tip3.y, isDrawing: p3 < 0.95 };
-    }
-  } else if (phase === "object_dims") {
-    ctx.fillText("STUDI KASUS: KOMPONEN BALOK BERTINGKAT (L-BLOCK)", bx + 45, by + 58);
-
-    // Kiri: Pandangan Ortogonal 2D (Tampak Depan & Tampak Samping)
-    const pOrtho = subProgress(segProgress, 0.05, 0.45);
-    drawBoardNoteCard(
-      ctx,
-      bx + 50,
-      by + 105,
-      580,
-      200,
-      "Spesifikasi Ukuran Benda Kerja Asli",
-      [
-        "• Panjang Sumbu X (L) = 60 mm",
-        "• Kedalaman Sumbu Y (W) = 40 mm",
-        "• Tinggi Total Sumbu Z (H) = 50 mm",
-        "• Tinggi Undakan = 22 mm | Lebar Menara = 26 mm"
-      ],
-      "#1d4ed8",
-      pOrtho
-    );
-
-    // Gambar Tampak Depan 2D (X-Z) di kiri bawah papan
-    const ox = bx + 110;
-    const oy = by + 690;
-    const sc = 3.6;
-    ctx.strokeStyle = "#1d4ed8";
-    ctx.fillStyle = "rgba(37, 99, 235, 0.16)";
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    ctx.lineTo(ox + 60 * sc, oy);
-    ctx.lineTo(ox + 60 * sc, oy - 22 * sc);
-    ctx.lineTo(ox + 26 * sc, oy - 22 * sc);
-    ctx.lineTo(ox + 26 * sc, oy - 50 * sc);
-    ctx.lineTo(ox, oy - 50 * sc);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#0f172a";
-    ctx.font = "bold 19px sans-serif";
-    ctx.fillText("Tampak Depan (X-Z)", ox + 20, oy - 50 * sc - 20);
-    drawArrow(ctx, ox, oy + 28, ox + 60 * sc, oy + 28, "#dc2626", 2.5, 9, true);
-    ctx.fillStyle = "#dc2626";
-    ctx.fillText("L = 60 mm", ox + 65, oy + 52);
-
-    // Gambar Tampak Samping (Y-Z)
-    const sx0 = bx + 400;
-    ctx.strokeStyle = "#059669";
-    ctx.fillStyle = "rgba(5, 150, 105, 0.16)";
-    ctx.fillRect(sx0, oy - 50 * sc, 40 * sc, 50 * sc);
-    ctx.strokeRect(sx0, oy - 50 * sc, 40 * sc, 50 * sc);
-    ctx.beginPath();
-    ctx.moveTo(sx0, oy - 22 * sc);
-    ctx.lineTo(sx0 + 40 * sc, oy - 22 * sc);
-    ctx.stroke();
-    ctx.fillStyle = "#0f172a";
-    ctx.fillText("Tampak Samping (Y-Z)", sx0 - 10, oy - 50 * sc - 20);
-    drawArrow(ctx, sx0, oy + 28, sx0 + 40 * sc, oy + 28, "#059669", 2.5, 9, true);
-    ctx.fillStyle = "#059669";
-    ctx.fillText("W = 40 mm", sx0 + 25, oy + 52);
-
-    // Kanan: Konstruksi 3D Piktorial
-    const p3D = subProgress(segProgress, 0.3, 0.92);
-    const cfg = {
-      originX: bx + 1090,
-      originY: by + 650,
-      alphaDeg: 30,
-      betaDeg: 30,
-      sx: 1,
-      sy: 1,
-      sz: 1,
-      unitScale: 4.5,
-      axisLength: 260
-    };
-    drawProjectionAxes(ctx, cfg, p3D, false);
-    const tip = drawProjectedLBlock(ctx, cfg, p3D, true);
-    pointerTarget = { x: tip.x, y: tip.y, isDrawing: p3D < 0.9 };
-  } else if (phase === "iso_axes" || phase === "iso_complete") {
-    ctx.fillText("1. PROYEKSI ISOMETRI (Sudut 30° & 30°, Skala 1 : 1 : 1)", bx + 45, by + 58);
-
-    const cfg = {
-      originX: bx + 530,
-      originY: by + 640,
-      alphaDeg: 30,
-      betaDeg: 30,
-      sx: 1,
-      sy: 1,
-      sz: 1,
-      unitScale: 4.8,
-      axisLength: 310
-    };
-
-    if (phase === "iso_axes") {
-      const axisProg = subProgress(segProgress, 0.05, 0.65);
-      const endPt = drawProjectionAxes(ctx, cfg, axisProg, true);
-
-      // Lingkaran sudut 120° antar sumbu
-      if (segProgress > 0.55) {
-        drawBoardNoteCard(
-          ctx,
-          bx + 920,
-          by + 120,
-          540,
-          280,
-          "Ciri Geometri Sumbu Isometri",
-          [
-            "• Sumbu X miring α = 30° ke kiri-atas",
-            "• Sumbu Y miring β = 30° ke kanan-atas",
-            "• Sumbu Z tegak lurus vertikal (90°)",
-            "• Sudut apit antar sumbu X-Y-Z = 120°",
-            "• Ketiga bidang tampak sama jelas (Simetris)"
-          ],
-          "#2563eb",
-          subProgress(segProgress, 0.55, 0.85)
-        );
-      }
-      pointerTarget = endPt
-        ? { x: endPt.x, y: endPt.y, isDrawing: axisProg < 0.95 }
-        : { x: cfg.originX, y: cfg.originY, isDrawing: true };
-    } else {
-      drawProjectionAxes(ctx, cfg, 1, true);
-      const drawProg = subProgress(segProgress, 0.05, 0.82);
-      const tip = drawProjectedLBlock(ctx, cfg, drawProg, true);
-
-      drawBoardNoteCard(
-        ctx,
-        bx + 920,
-        by + 120,
-        540,
-        240,
-        "Perhitungan Ukuran Proyeksi Isometri",
-        [
-          "• Rasio Skala Sumbu: X : Y : Z = 1 : 1 : 1",
-          "• Sumbu X = 60 mm × 1 = 60 mm (Utuh)",
-          "• Sumbu Y = 40 mm × 1 = 40 mm (Utuh)",
-          "• Sumbu Z = 50 mm × 1 = 50 mm (Utuh)"
-        ],
-        "#2563eb",
-        1
-      );
-
-      drawBoardNoteCard(
-        ctx,
-        bx + 920,
-        by + 400,
-        540,
-        190,
-        "Keunggulan & Catatan Teknis",
-        [
-          "• Tidak ada pemendekan ukuran gambar kerja",
-          "• Langsung diukur memakai penggaris skala 1:1",
-          "• Sudut 30° dibuat mudah dengan penggaris segitiga"
-        ],
-        "#0284c7",
-        subProgress(segProgress, 0.4, 0.75)
-      );
-
-      pointerTarget = { x: tip.x, y: tip.y, isDrawing: drawProg < 0.85 };
-    }
-  } else if (phase === "dim_axes" || phase === "dim_complete") {
-    ctx.fillText("2. PROYEKSI DIMETRI (Sudut 7° & 42°, Skala 1 : ½ : 1)", bx + 45, by + 58);
-
-    const cfg = {
-      originX: bx + 540,
-      originY: by + 640,
-      alphaDeg: 7,
-      betaDeg: 42,
-      sx: 1,
-      sy: 0.5,
-      sz: 1,
-      unitScale: 4.8,
-      axisLength: 310
-    };
-
-    if (phase === "dim_axes") {
-      const axisProg = subProgress(segProgress, 0.05, 0.65);
-      const endPt = drawProjectionAxes(ctx, cfg, axisProg, true);
-
-      drawBoardNoteCard(
-        ctx,
-        bx + 920,
-        by + 120,
-        540,
-        265,
-        "Mengapa Memakai Proyeksi Dimetri?",
-        [
-          "• Menghindari garis berimpit pada kubus/balok",
-          "• Sumbu X dibuat landai: α = 7°",
-          "• Sumbu Y dibuat curam: β = 42°",
-          "• Menonjolkan wajah depan benda kerja"
-        ],
-        "#059669",
-        subProgress(segProgress, 0.35, 0.75)
-      );
-
-      pointerTarget = endPt
-        ? { x: endPt.x, y: endPt.y, isDrawing: axisProg < 0.95 }
-        : { x: cfg.originX, y: cfg.originY, isDrawing: true };
-    } else {
-      drawProjectionAxes(ctx, cfg, 1, true);
-      const drawProg = subProgress(segProgress, 0.05, 0.82);
-      const tip = drawProjectedLBlock(ctx, cfg, drawProg, true);
-
-      drawBoardNoteCard(
-        ctx,
-        bx + 920,
-        by + 120,
-        540,
-        245,
-        "Perhitungan Ukuran Proyeksi Dimetri",
-        [
-          "• Rasio Skala Sumbu: X : Y : Z = 1 : ½ : 1",
-          "• Sumbu X (7°)  = 60 mm × 1   = 60 mm",
-          "• Sumbu Y (42°) = 40 mm × 0,5 = 20 mm (Diperpendek!)",
-          "• Sumbu Z (90°) = 50 mm × 1   = 50 mm"
-        ],
-        "#059669",
-        1
-      );
-
-      drawBoardNoteCard(
-        ctx,
-        bx + 920,
-        by + 400,
-        540,
-        200,
-        "Aturan Penting Angka Ukur (SNI / ISO)",
-        [
-          "• Panjang fisik garis Y digambar 20 mm di kertas",
-          "• Namun angka ukuran tetap ditulis 40 mm asli",
-          "• Proporsi kedalaman terlihat jauh lebih natural"
-        ],
-        "#047857",
-        subProgress(segProgress, 0.4, 0.78)
-      );
-
-      pointerTarget = { x: tip.x, y: tip.y, isDrawing: drawProg < 0.85 };
-    }
-  } else if (phase === "oblique_complete") {
-    ctx.fillText("3. PROYEKSI MIRING / OBLIQUE (Sudut 0° & 45°)", bx + 45, by + 58);
-
-    // Kiri: Oblique Cavalier (Skala 1:1:1)
-    const pCav = subProgress(segProgress, 0.05, 0.50);
-    const cfgCav = {
-      originX: bx + 420,
-      originY: by + 630,
-      alphaDeg: 0,
-      betaDeg: 45,
-      sx: 1,
-      sy: 1.0,
-      sz: 1,
-      unitScale: 3.7,
-      axisLength: 220
-    };
-    drawProjectionAxes(ctx, cfgCav, pCav, true);
-    const tipCav = drawProjectedLBlock(ctx, cfgCav, pCav, true);
-
-    drawBoardNoteCard(
-      ctx,
-      bx + 60,
-      by + 100,
-      640,
-      160,
-      "A. Oblique Cavalier (Skala 1 : 1 : 1)",
-      [
-        "• Sumbu X = 0° (Mendatar) | Sumbu Y = 45°",
-        "• Kedalaman Y utuh 100% (W = 40 mm)",
-        "• Tampak agak memanjang ke belakang"
-      ],
-      "#d97706",
-      pCav
-    );
-
-    // Kanan: Oblique Cabinet (Skala 1:1/2:1)
-    const pCab = subProgress(segProgress, 0.45, 0.92);
-    const cfgCab = {
-      originX: bx + 1140,
-      originY: by + 630,
-      alphaDeg: 0,
-      betaDeg: 45,
-      sx: 1,
-      sy: 0.5,
-      sz: 1,
-      unitScale: 3.7,
-      axisLength: 220
-    };
-    if (pCab > 0) {
-      drawProjectionAxes(ctx, cfgCab, pCab, true);
-      const tipCab = drawProjectedLBlock(ctx, cfgCab, pCab, true);
-      drawBoardNoteCard(
-        ctx,
-        bx + 780,
-        by + 100,
-        660,
-        160,
-        "B. Oblique Cabinet (Skala 1 : ½ : 1) — Paling Umum",
-        [
-          "• Sumbu X = 0° (Siku-siku 90° dengan Z) | Sumbu Y = 45°",
-          "• Kedalaman Y dikali ½: 40 mm × 0,5 = 20 mm",
-          "• Bentuk tampak realistis & tidak mengalami distorsi"
-        ],
-        "#b45309",
-        pCab
-      );
-      pointerTarget = { x: tipCab.x, y: tipCab.y, isDrawing: pCab < 0.9 };
-    } else {
-      pointerTarget = { x: tipCav.x, y: tipCav.y, isDrawing: true };
-    }
-  } else if (phase === "morph_iso_to_dim") {
-    ctx.fillText("CARA MENGUBAH: PROYEKSI ISOMETRI ➔ PROYEKSI DIMETRI", bx + 45, by + 58);
-
-    // Interpolasi mulus dari Isometri (30, 30, sy=1) ke Dimetri (7, 42, sy=0.5)
-    const morphT = easeInOutCubic(subProgress(segProgress, 0.12, 0.85));
-    const curAlpha = lerp(30, 7, morphT);
-    const curBeta = lerp(30, 42, morphT);
-    const curSy = lerp(1.0, 0.5, morphT);
-
-    // Bayangan tipis posisi awal Isometri sebagai pembanding visual
-    ctx.save();
-    ctx.globalAlpha = 0.22;
-    drawProjectedLBlock(
-      ctx,
-      { originX: bx + 530, originY: by + 640, alphaDeg: 30, betaDeg: 30, sx: 1, sy: 1, sz: 1, unitScale: 4.8 },
-      1,
-      false
-    );
-    ctx.restore();
-
-    const cfg = {
-      originX: bx + 530,
-      originY: by + 640,
-      alphaDeg: curAlpha,
-      betaDeg: curBeta,
-      sx: 1,
-      sy: curSy,
-      sz: 1,
-      unitScale: 4.8,
-      axisLength: 310
-    };
-    const yAxisTip = drawProjectionAxes(ctx, cfg, 1, true);
-    drawProjectedLBlock(ctx, cfg, 1, true);
-
-    drawBoardNoteCard(
-      ctx,
-      bx + 900,
-      by + 115,
-      560,
-      290,
-      "3 Langkah Konversi Isometri → Dimetri",
-      [
-        `1. Rebahkan Sumbu X: 30° ➔ ${curAlpha.toFixed(0)}° (Target: 7°)`,
-        `2. Naikkan Sumbu Y:  30° ➔ ${curBeta.toFixed(0)}° (Target: 42°)`,
-        `3. Pangkas Skala Y:  1,0 ➔ ${curSy.toFixed(2)} (Target: 0,5)`,
-        `• Ukuran Gambar Y:   40 mm ➔ ${Math.round(40 * curSy)} mm`,
-        "• Ukuran Sumbu X (60 mm) & Z (50 mm) TETAP!"
-      ],
-      "#059669",
-      1
-    );
-
-    // Indikator Bar Transformasi Real-Time
-    drawBoardNoteCard(
-      ctx,
-      bx + 900,
-      by + 440,
-      560,
-      195,
-      "Rumus Konversi Koordinat Gambar",
-      [
-        "• X_baru = X_asli × 1,0  (sudut 7°)",
-        "• Y_baru = Y_asli × 0,5  (sudut 42°)",
-        "• Z_baru = Z_asli × 1,0  (vertikal 90°)"
-      ],
-      "#2563eb",
-      1
-    );
-
-    pointerTarget = { x: yAxisTip.x, y: yAxisTip.y, isDrawing: morphT > 0.05 && morphT < 0.95 };
-  } else if (phase === "morph_dim_to_obl") {
-    ctx.fillText("CARA MENGUBAH: PROYEKSI DIMETRI ➔ PROYEKSI MIRING (CABINET)", bx + 45, by + 58);
-
-    const morphT = easeInOutCubic(subProgress(segProgress, 0.12, 0.85));
-    const curAlpha = lerp(7, 0, morphT);
-    const curBeta = lerp(42, 45, morphT);
-
-    // Bayangan tipis Dimetri
-    ctx.save();
-    ctx.globalAlpha = 0.22;
-    drawProjectedLBlock(
-      ctx,
-      { originX: bx + 530, originY: by + 640, alphaDeg: 7, betaDeg: 42, sx: 1, sy: 0.5, sz: 1, unitScale: 4.8 },
-      1,
-      false
-    );
-    ctx.restore();
-
-    const cfg = {
-      originX: bx + 530,
-      originY: by + 640,
-      alphaDeg: curAlpha,
-      betaDeg: curBeta,
-      sx: 1,
-      sy: 0.5,
-      sz: 1,
-      unitScale: 4.8,
-      axisLength: 310
-    };
-    const yAxisTip = drawProjectionAxes(ctx, cfg, 1, true);
-    drawProjectedLBlock(ctx, cfg, 1, true);
-
-    drawBoardNoteCard(
-      ctx,
-      bx + 900,
-      by + 115,
-      560,
-      290,
-      "3 Langkah Konversi Dimetri → Miring Cabinet",
-      [
-        `1. Ratakan Sumbu X: 7° ➔ ${curAlpha.toFixed(1)}° (Horizontal 0°)`,
-        "   (Bidang depan X-Z menjadi siku-siku 90°)",
-        `2. Geser Sumbu Y:   42° ➔ ${curBeta.toFixed(0)}° (Target: 45°)`,
-        "3. Skala Sumbu Y:   Tetap ½ (W = 20 mm) untuk Cabinet",
-        "   (Atau kalikan 2 menjadi 40 mm untuk Cavalier)"
-      ],
-      "#d97706",
-      1
-    );
-
-    drawBoardNoteCard(
-      ctx,
-      bx + 900,
-      by + 440,
-      560,
-      195,
-      "Keuntungan Konversi ke Proyeksi Miring",
-      [
-        "• Lingkaran atau profil rumit di bidang depan (X-Z)",
-        "  dapat digambar langsung memakai jangka biasa",
-        "  tanpa berubah menjadi elips!"
-      ],
-      "#b45309",
-      1
-    );
-
-    pointerTarget = { x: cfg.originX - 180, y: cfg.originY, isDrawing: morphT > 0.05 && morphT < 0.95 };
-  } else if (phase === "final_comparison") {
-    ctx.fillText("RINGKASAN & PERBANDINGAN LENGKAP 3 PROYEKSI PIKTORIAL", bx + 45, by + 58);
-
-    // Tabel Perbandingan Lengkap di Bagian Atas Papan Tulis
-    const tx = bx + 45;
-    const ty = by + 90;
-    const tw = 1420;
-    const rowH = 54;
-    const cols = [0, 310, 590, 880, 1140, 1420];
-    const rows = [
-      ["Jenis Proyeksi", "Sudut Sumbu X (α)", "Sudut Sumbu Y (β)", "Skala (X : Y : Z)", "Ukuran Gambar (L×W×H)"],
-      ["1. Isometri", "30° (Naik Kiri)", "30° (Naik Kanan)", "1 : 1 : 1", "60 × 40 × 50 mm"],
-      ["2. Dimetri", "7° (Landai)", "42° (Curam)", "1 : ½ : 1", "60 × 20 × 50 mm"],
-      ["3. Miring (Cabinet)", "0° (Mendatar Siku)", "45° (Miring)", "1 : ½ : 1", "60 × 20 × 50 mm"],
-      ["4. Miring (Cavalier)", "0° (Mendatar Siku)", "45° (Miring)", "1 : 1 : 1", "60 × 40 × 50 mm"]
-    ];
-
-    rows.forEach((r, rIdx) => {
-      const yPos = ty + rIdx * rowH;
-      ctx.fillStyle = rIdx === 0 ? "#1e3a8a" : rIdx % 2 === 1 ? "#eff6ff" : "#ffffff";
-      ctx.fillRect(tx, yPos, tw, rowH);
-      ctx.strokeStyle = "#cbd5e1";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(tx, yPos, tw, rowH);
-
-      ctx.fillStyle = rIdx === 0 ? "#ffffff" : "#0f172a";
-      ctx.font = rIdx === 0 ? "bold 19px sans-serif" : "bold 18px sans-serif";
-      r.forEach((cellText, cIdx) => {
-        ctx.fillText(cellText, tx + cols[cIdx] + 16, yPos + 34);
-      });
-    });
-
-    // Tiga Ilustrasi Berdampingan di Bawah Tabel
-    const models = [
-      { label: "ISOMETRI (30°/30°, 1:1:1)", ox: bx + 270, oy: by + 695, a: 30, b: 30, sy: 1.0, col: "#2563eb" },
-      { label: "DIMETRI (7°/42°, 1:½:1)", ox: bx + 770, oy: by + 695, a: 7, b: 42, sy: 0.5, col: "#059669" },
-      { label: "MIRING CABINET (0°/45°, 1:½:1)", ox: bx + 1270, oy: by + 695, a: 0, b: 45, sy: 0.5, col: "#d97706" }
-    ];
-
-    models.forEach((m) => {
-      const cfg = {
-        originX: m.ox,
-        originY: m.oy,
-        alphaDeg: m.a,
-        betaDeg: m.b,
-        sx: 1,
-        sy: m.sy,
-        sz: 1,
-        unitScale: 2.9,
-        axisLength: 165
-      };
-      drawProjectionAxes(ctx, cfg, 1, false);
-      drawProjectedLBlock(ctx, cfg, 1, false);
-
-      ctx.fillStyle = m.col;
-      ctx.font = "bold 19px sans-serif";
-      ctx.fillText(m.label, m.ox - 135, m.oy + 70);
-    });
-
-    // Tunjuk bergantian ke ketiga model
-    const idx = Math.min(2, Math.floor(segProgress * 3));
-    pointerTarget = {
-      x: models[idx].ox,
-      y: models[idx].oy - 60 + Math.sin(globalTime * 3) * 12,
-      isDrawing: false
-    };
-  }
-
-  ctx.restore();
-  return pointerTarget;
-}
-
-// ============================================================================
-// PENGGAMBARAN INSTRUKTUR MANUSIA DENGAN KINEMATIKA NYATA (BERNAPAS, JALAN,
-// MENOLEH, KEDIP MATA, LIP-SYNC SUARA, DAN IK TANGAN MENGGAMBAR/MENUNJUK)
-// ============================================================================
-function drawAnimatedInstructor(ctx, globalTime, isSpeaking, pointerTarget) {
-  ctx.save();
-
-  // Posisi berdiri dinamis: instruktur bergeser sedikit mendekati area papan tulis yang sedang aktif
-  const targetStandX = clamp(pointerTarget.x - 270, 175, 315);
-  const standX = lerp(225, targetStandX, 0.65) + Math.sin(globalTime * 1.1) * 6;
-  const breathY = Math.sin(globalTime * 2.4) * 3.5;
-  const floorY = 980;
-
-  // Bayangan kaki di lantai
-  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-  ctx.beginPath();
-  ctx.ellipse(standX, floorY + 6, 72, 16, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // --- KAKI & SEPATU ---
-  const hipX = standX;
-  const hipY = 740 + breathY * 0.5;
-  const stepSwing = Math.sin(globalTime * 1.1) * 5;
-
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  // Kaki Kiri
-  ctx.strokeStyle = "#1e293b";
-  ctx.lineWidth = 28;
-  ctx.beginPath();
-  ctx.moveTo(hipX - 20, hipY);
-  ctx.lineTo(hipX - 26 - stepSwing * 0.4, 860);
-  ctx.lineTo(hipX - 24 - stepSwing, floorY - 10);
-  ctx.stroke();
-
-  // Kaki Kanan
-  ctx.strokeStyle = "#0f172a";
-  ctx.beginPath();
-  ctx.moveTo(hipX + 20, hipY);
-  ctx.lineTo(hipX + 26 + stepSwing * 0.4, 860);
-  ctx.lineTo(hipX + 24 + stepSwing, floorY - 10);
-  ctx.stroke();
-
-  // Sepatu Kulit Cokelat Tua
-  ctx.fillStyle = "#451a03";
-  drawRoundedRect(ctx, hipX - 46 - stepSwing, floorY - 18, 46, 22, 8);
-  ctx.fill();
-  drawRoundedRect(ctx, hipX + 6 + stepSwing, floorY - 18, 48, 22, 8);
-  ctx.fill();
-
-  // --- BADAN / TORSO (Kemeja Teknik Biru Muda + Rompi/Jas Instruktur Navy) ---
-  const torsoTopY = 535 + breathY;
-  const torsoBottomY = hipY + 10;
-
-  // Kemeja Dalam
-  ctx.fillStyle = "#e0f2fe";
-  drawRoundedRect(ctx, hipX - 54, torsoTopY, 108, torsoBottomY - torsoTopY, 26);
-  ctx.fill();
-
-  // Dasi Merah Marun Teknik
-  ctx.fillStyle = "#b91c1c";
-  ctx.beginPath();
-  ctx.moveTo(hipX, torsoTopY + 12);
-  ctx.lineTo(hipX + 11, torsoTopY + 95);
-  ctx.lineTo(hipX, torsoTopY + 125);
-  ctx.lineTo(hipX - 9, torsoTopY + 95);
-  ctx.closePath();
-  ctx.fill();
-
-  // Jas / Blazer Instruktur
-  ctx.fillStyle = "#1e3a8a";
-  // Sisi kiri jas
-  drawRoundedRect(ctx, hipX - 58, torsoTopY + 4, 42, torsoBottomY - torsoTopY - 4, 16);
-  ctx.fill();
-  // Sisi kanan jas
-  drawRoundedRect(ctx, hipX + 16, torsoTopY + 4, 42, torsoBottomY - torsoTopY - 4, 16);
-  ctx.fill();
-
-  // Sabuk
-  ctx.fillStyle = "#0f172a";
-  ctx.fillRect(hipX - 52, torsoBottomY - 16, 104, 12);
-  ctx.fillStyle = "#fbbf24";
-  ctx.fillRect(hipX - 10, torsoBottomY - 17, 20, 14);
-
-  // --- LENGAN KIRI (Gestur Menjelaskan / Memegang Penggaris Segitiga Teknik) ---
-  const leftShoulderX = hipX - 50;
-  const leftShoulderY = torsoTopY + 26;
-  const gestureWave = isSpeaking ? Math.sin(globalTime * 5.2) * 18 : Math.sin(globalTime * 1.8) * 6;
-  const leftHandTargetX = hipX - 88 + Math.cos(globalTime * 2.5) * 10;
-  const leftHandTargetY = torsoTopY + 105 + gestureWave;
-
-  const leftArm = solveArmIK(leftShoulderX, leftShoulderY, leftHandTargetX, leftHandTargetY, 78, 74, 1);
-
-  ctx.strokeStyle = "#1e40af";
-  ctx.lineWidth = 24;
-  ctx.beginPath();
-  ctx.moveTo(leftShoulderX, leftShoulderY);
-  ctx.lineTo(leftArm.elbowX, leftArm.elbowY);
-  ctx.lineTo(leftArm.handX, leftArm.handY);
-  ctx.stroke();
-
-  // Tangan Kiri & Penggaris Segitiga 30°-60°
-  ctx.fillStyle = "#f1c27d";
-  ctx.beginPath();
-  ctx.arc(leftArm.handX, leftArm.handY, 12, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Penggaris Segitiga Kuning Transparan di Tangan Kiri
-  ctx.save();
-  ctx.translate(leftArm.handX - 8, leftArm.handY + 6);
-  ctx.rotate(-0.35 + gestureWave * 0.004);
-  ctx.fillStyle = "rgba(250, 204, 21, 0.78)";
-  ctx.strokeStyle = "#ca8a04";
-  ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(-68, 38);
-  ctx.lineTo(0, 38);
-  ctx.closePath();
-  ctx.fill();
+  ctx.lineTo(-10, 58);
   ctx.stroke();
+
+  ctx.translate(-10, 58);
+  ctx.rotate(-0.35 + Math.cos(time * 2.5) * 0.1);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(12, 52);
+  ctx.stroke();
+
+  // Telapak tangan belakang
+  ctx.fillStyle = role === "liquidator" ? "#1f2937" : skinColor;
+  ctx.beginPath();
+  ctx.arc(12, 56, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (prop === "clipboard") {
+    ctx.fillStyle = "#92400e";
+    drawRoundedRect(ctx, -6, 42, 36, 48, 4);
+    ctx.fill();
+    ctx.fillStyle = "#f8fafc";
+    drawRoundedRect(ctx, -2, 47, 28, 38, 2);
+    ctx.fill();
+  }
   ctx.restore();
 
-  // --- KEPALA, WAJAH EKSPRESIF & LIP-SYNC ---
-  const neckX = hipX;
-  const neckY = torsoTopY - 8;
+  // ---- TORSO / BADAN & JAS LAB / SERAGAM ----
+  ctx.save();
+  // Kemeja dalam
+  ctx.fillStyle = shirtColor;
+  drawRoundedRect(ctx, -42, -58, 84, 138, 22);
+  ctx.fill();
+
+  // Dasi Ilmuwan / Operator
+  if (role === "scientist" || role === "operator") {
+    ctx.fillStyle = tieColor;
+    ctx.beginPath();
+    ctx.moveTo(-6, -48);
+    ctx.lineTo(6, -48);
+    ctx.lineTo(10, 22);
+    ctx.lineTo(0, 36);
+    ctx.lineTo(-10, 22);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Belahan Jas Lab / Jaket Pelindung
+  ctx.fillStyle = coatColor;
+  drawRoundedRect(ctx, -46, -58, 34, 144, 14);
+  ctx.fill();
+  drawRoundedRect(ctx, 12, -58, 34, 144, 14);
+  ctx.fill();
+
+  // Kerah Jas & Lencana Radiasi
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-14, -56);
+  ctx.lineTo(-32, -20);
+  ctx.lineTo(-12, -10);
+  ctx.moveTo(14, -56);
+  ctx.lineTo(32, -20);
+  ctx.lineTo(12, -10);
+  ctx.stroke();
+
+  // Lencana Dosimeter di Dada Kanan
+  ctx.fillStyle = "#facc15";
+  ctx.beginPath();
+  ctx.arc(28, -8, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#111827";
+  ctx.beginPath();
+  ctx.arc(28, -8, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Rompi Timbal (Lead Apron) untuk Liquidator
+  if (role === "liquidator" || role === "firefighter") {
+    ctx.fillStyle = role === "liquidator" ? "rgba(30, 41, 59, 0.85)" : "rgba(234, 179, 8, 0.85)";
+    ctx.fillRect(-44, 12, 88, 22);
+  }
+  ctx.restore();
+
+  // ---- LEHER & KEPALA ARTIKULASI ----
+  ctx.save();
+  const headTilt =
+    emotion === "shocked" || emotion === "panicked"
+      ? Math.sin(time * 14) * 0.05
+      : Math.sin(time * 1.8) * 0.06;
+  ctx.translate(0, -64);
+  ctx.rotate(headTilt);
 
   // Leher
-  ctx.fillStyle = "#e0ac69";
-  ctx.fillRect(neckX - 14, neckY - 20, 28, 28);
+  ctx.fillStyle = skinColor;
+  drawRoundedRect(ctx, -13, -16, 26, 26, 8);
+  ctx.fill();
 
-  const headCenterX = neckX + 4;
-  const headCenterY = neckY - 58;
-  // Sedikit anggukan kepala mengikuti irama bicara dan arah papan tulis
-  const lookAngle = clamp((pointerTarget.y - headCenterY) * 0.00035, -0.12, 0.12) +
-    (isSpeaking ? Math.sin(globalTime * 6.0) * 0.03 : 0);
-
-  ctx.save();
-  ctx.translate(headCenterX, headCenterY);
-  ctx.rotate(lookAngle);
-
-  // Wajah Oval
-  ctx.fillStyle = "#f1c27d";
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 42, 48, 0, 0, Math.PI * 2);
+  // Wajah / Kepala
+  ctx.fillStyle = skinColor;
+  drawRoundedRect(ctx, -38, -92, 76, 82, 32);
   ctx.fill();
 
   // Telinga
   ctx.beginPath();
-  ctx.arc(-40, 4, 10, 0, Math.PI * 2);
+  ctx.arc(-38, -50, 9, 0, Math.PI * 2);
+  ctx.arc(38, -50, 9, 0, Math.PI * 2);
   ctx.fill();
 
-  // Rambut Rapi Profesional
-  ctx.fillStyle = "#0f172a";
-  ctx.beginPath();
-  ctx.arc(0, -14, 44, Math.PI * 0.92, Math.PI * 2.08);
-  ctx.lineTo(36, -4);
-  ctx.quadraticCurveTo(10, -32, -36, -12);
-  ctx.closePath();
-  ctx.fill();
-
-  // Alis Ekspresif
-  const browLift = isSpeaking ? Math.sin(globalTime * 4.5) * 2.5 : 0;
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 3.5;
-  ctx.beginPath();
-  ctx.moveTo(-14, -14 - browLift);
-  ctx.lineTo(-2, -16 - browLift);
-  ctx.moveTo(12, -16 - browLift);
-  ctx.lineTo(26, -13 - browLift);
-  ctx.stroke();
-
-  // Mata + Kedipan Alami (Berkedip setiap ~3.8 detik)
-  const blinkCycle = globalTime % 3.8;
-  const isBlinking = blinkCycle > 3.62;
-  const eyeLookX = clamp((pointerTarget.x - headCenterX) * 0.004, 1, 5);
-  const eyeLookY = clamp((pointerTarget.y - headCenterY) * 0.004, -3, 3);
-
-  if (isBlinking) {
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = 3;
+  // Rambut / Topi Operator Chernobyl / Helm Pemadam / Masker Gas Liquidator
+  if (role === "scientist") {
+    ctx.fillStyle = "#1e293b";
     ctx.beginPath();
-    ctx.moveTo(-14, -4);
-    ctx.lineTo(-1, -4);
-    ctx.moveTo(12, -4);
-    ctx.lineTo(25, -4);
-    ctx.stroke();
-  } else {
-    // Bola mata putih
+    ctx.arc(0, -76, 40, Math.PI * 0.95, Math.PI * 2.05);
+    ctx.fill();
+    // Jambul rambut dinamis
+    ctx.beginPath();
+    ctx.moveTo(-20, -98);
+    ctx.quadraticCurveTo(5, -118, 28, -94);
+    ctx.fill();
+  } else if (role === "operator") {
+    // Topi Putih Khas Operator Reaktor Nuklir Soviet (Shapka Putih)
+    ctx.fillStyle = "#f8fafc";
+    drawRoundedRect(ctx, -40, -112, 80, 34, 10);
+    ctx.fill();
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(-36, -90, 72, 8);
+  } else if (role === "firefighter") {
+    // Helm Pemadam Kebakaran Chernobyl
+    ctx.fillStyle = "#b91c1c";
+    ctx.beginPath();
+    ctx.arc(0, -78, 44, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#facc15";
+    ctx.fillRect(-48, -80, 96, 8);
+  } else if (role === "liquidator") {
+    // Tudung Hazmat & Respirator Gas Mask
+    ctx.fillStyle = "#3f6212";
+    ctx.beginPath();
+    ctx.arc(0, -68, 44, Math.PI * 0.8, Math.PI * 2.2);
+    ctx.fill();
+  }
+
+  // ---- MATA, KEDIPAN, ALIS, DAN KACAMATA ----
+  const blinkCycle = time % 3.8;
+  const isBlinking = blinkCycle > 3.65;
+  const eyeScaleY = isBlinking ? 0.1 : emotion === "shocked" || emotion === "panicked" ? 1.35 : 1.0;
+
+  const drawEye = (ex) => {
+    ctx.save();
+    ctx.translate(ex, -56);
+    ctx.scale(1, eyeScaleY);
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.ellipse(-7, -4, 7.5, 6, 0, 0, Math.PI * 2);
-    ctx.ellipse(18, -4, 7.5, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, 10, 8, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Pupil melirik ke arah objek papan tulis
+    // Pupil bergerak hidup
+    const lookX = Math.sin(time * 1.4) * 2.5 + (facing > 0 ? 1.5 : -1.5);
+    const pupilR = emotion === "shocked" || emotion === "panicked" ? 3.2 : 4.8;
     ctx.fillStyle = "#0f172a";
     ctx.beginPath();
-    ctx.arc(-7 + eyeLookX, -4 + eyeLookY, 3.3, 0, Math.PI * 2);
-    ctx.arc(18 + eyeLookX, -4 + eyeLookY, 3.3, 0, Math.PI * 2);
+    ctx.arc(lookX, 0, pupilR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pantulan cahaya mata
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(lookX + 1.8, -2, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  drawEye(-15);
+  drawEye(15);
+
+  // Alis Ekspresif
+  ctx.strokeStyle = "#0f172a";
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  const browLift =
+    emotion === "shocked" ? -7 : emotion === "panicked" ? -5 : isSpeaking ? Math.sin(speechPhase * 8) * 3 : 0;
+  const browTilt = emotion === "panicked" || emotion === "somber" ? -4 : 2;
+
+  ctx.beginPath();
+  ctx.moveTo(-26, -68 + browLift - browTilt);
+  ctx.lineTo(-6, -70 + browLift + browTilt);
+  ctx.moveTo(6, -70 + browLift + browTilt);
+  ctx.lineTo(26, -68 + browLift - browTilt);
+  ctx.stroke();
+
+  // Kacamata Ilmuwan
+  if (role === "scientist") {
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 3;
+    drawRoundedRect(ctx, -28, -66, 24, 18, 5);
+    ctx.stroke();
+    drawRoundedRect(ctx, 4, -66, 24, 18, 5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-4, -57);
+    ctx.lineTo(4, -57);
+    ctx.stroke();
+  }
+
+  // ---- MULUT LIP-SYNC REALISTIS ATAU MASKER RESPIRATOR ----
+  if (role === "liquidator") {
+    // Masker Respirator Anti-Radiasi
+    ctx.fillStyle = "#1e293b";
+    drawRoundedRect(ctx, -22, -44, 44, 30, 12);
+    ctx.fill();
+    ctx.fillStyle = "#475569";
+    ctx.beginPath();
+    ctx.arc(-14, -28, 9, 0, Math.PI * 2);
+    ctx.arc(14, -28, 9, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.save();
+    ctx.translate(0, -28);
+    if (isSpeaking) {
+      const openAmount =
+        0.25 +
+        0.75 * Math.abs(Math.sin(speechPhase * 13.5) * Math.cos(speechPhase * 7.2));
+      const mouthW = 14 + openAmount * 8;
+      const mouthH = 4 + openAmount * 14;
+      ctx.fillStyle = "#450a0a";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, mouthW * 0.6, mouthH * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Gigi atas & lidah
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(-mouthW * 0.38, -mouthH * 0.5, mouthW * 0.76, 3.5);
+      ctx.fillStyle = "#ef4444";
+      ctx.beginPath();
+      ctx.ellipse(0, mouthH * 0.25, mouthW * 0.35, mouthH * 0.25, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (emotion === "shocked" || emotion === "panicked") {
+      ctx.fillStyle = "#450a0a";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 9, 11, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (emotion === "somber") {
+      ctx.strokeStyle = "#7c2d12";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(-10, 3);
+      ctx.quadraticCurveTo(0, -3, 10, 3);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = "#7c2d12";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(-11, -2);
+      ctx.quadraticCurveTo(0, 5, 11, -2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.restore(); // Akhir kepala
+
+  // ---- LENGAN DEPAN ARTIKULASI & PROPERTI CERITA ----
+  ctx.save();
+  ctx.translate(34, -42);
+  const gestureWave = isSpeaking ? Math.sin(time * 5.2) * 0.22 : Math.sin(time * 2.0) * 0.08;
+  const upperArmRot = pointAngle + gestureWave;
+  ctx.rotate(upperArmRot);
+
+  // Lengan Atas
+  ctx.strokeStyle = coatColor;
+  ctx.lineWidth = 21;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(48, 18);
+  ctx.stroke();
+
+  // Siku & Lengan Bawah
+  ctx.translate(48, 18);
+  ctx.rotate(-0.45 + gestureWave * 0.8);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(52, -10);
+  ctx.stroke();
+
+  // Tangan Depan
+  ctx.translate(52, -10);
+  ctx.fillStyle = role === "liquidator" ? "#1f2937" : skinColor;
+  ctx.beginPath();
+  ctx.arc(0, 0, 11, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Properti yang Dipegang Tangan Karakter
+  if (prop === "atom_orb") {
+    const pulse = 1 + 0.15 * Math.sin(time * 6);
+    const grad = ctx.createRadialGradient(18, -18, 2, 18, -18, 42 * pulse);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.35, "#00f2fe");
+    grad.addColorStop(1, "rgba(0, 242, 254, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(18, -18, 42 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Orbit elektron mini di tangan
+    ctx.strokeStyle = "rgba(56, 239, 125, 0.85)";
+    ctx.lineWidth = 2;
+    for (let k = 0; k < 3; k++) {
+      ctx.save();
+      ctx.translate(18, -18);
+      ctx.rotate((k * Math.PI) / 3 + time * 2.2);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 28, 9, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  } else if (prop === "pointer") {
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(85, -55);
+    ctx.stroke();
+    ctx.fillStyle = "#00f2fe";
+    ctx.beginPath();
+    ctx.arc(85, -55, 7, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (prop === "geiger") {
+    // Alat Detektor Radiasi Dosimeter Kuning
+    ctx.fillStyle = "#eab308";
+    drawRoundedRect(ctx, -6, -24, 42, 28, 5);
+    ctx.fill();
+    ctx.strokeStyle = "#f8fafc";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(36, -10);
+    ctx.lineTo(75, -30 + Math.sin(time * 8) * 8);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// ============================================================================
+// ILUSTRASI SPESIFIK SETIAP ADEGAN CERITA (FULL MOTION & OBJECTS)
+// ============================================================================
+
+// ADEGAN 1-3: FISIKA INTI ATOM URANIUM-235, TUMBUKAN NEUTRON & REAKSI BERANTAI
+function drawAtomicPhysicsStage(ctx, sc, localT, globalT, isSpeaking) {
+  const cx = WIDTH * 0.5;
+  const cy = HEIGHT * 0.37;
+
+  // Grid Kuantum Bercahaya di Latar
+  ctx.save();
+  ctx.strokeStyle = "rgba(0, 242, 254, 0.12)";
+  ctx.lineWidth = 1.5;
+  for (let r = 80; r <= 440; r += 75) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + Math.sin(globalT * 2 + r) * 4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  if (sc.id === "scene_01") {
+    // Visual Perbandingan Energi: 1 Pelet Uranium (Kiri) vs Gunung Batu Bara (Kanan) + Atom Pusat
+    const glowGrad = ctx.createRadialGradient(cx, cy - 30, 10, cx, cy - 30, 260);
+    glowGrad.addColorStop(0, "rgba(0, 242, 254, 0.45)");
+    glowGrad.addColorStop(1, "rgba(0, 242, 254, 0)");
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 30, 260, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Orbit 3D Elektron Mengelilingi Inti Uranium
+    for (let o = 0; o < 4; o++) {
+      ctx.save();
+      ctx.translate(cx, cy - 30);
+      ctx.rotate((o * Math.PI) / 4 + globalT * 0.9);
+      ctx.strokeStyle = "rgba(56, 239, 125, 0.7)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 220, 68, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      const elAngle = globalT * 3.8 + o * 1.7;
+      const ex = Math.cos(elAngle) * 220;
+      const ey = Math.sin(elAngle) * 68;
+      ctx.fillStyle = "#00f2fe";
+      ctx.beginPath();
+      ctx.arc(ex, ey, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Inti Atom Uranium Berdenyut
+    for (let n = 0; n < 28; n++) {
+      const a = n * 2.39996 + globalT * 1.2;
+      const rad = Math.sqrt(n) * 10.5;
+      const nx = cx + Math.cos(a) * rad;
+      const ny = cy - 30 + Math.sin(a) * rad;
+      ctx.fillStyle = n % 2 === 0 ? "#ef4444" : "#38bdf8";
+      ctx.beginPath();
+      ctx.arc(nx, ny, 13, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Kartu Komparasi Energi di Bawah Atom
+    ctx.save();
+    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.strokeStyle = "#00f2fe";
+    ctx.lineWidth = 2.5;
+    drawRoundedRect(ctx, 90, cy + 220, 900, 130, 20);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#38ef7d";
+    ctx.font = "bold 34px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("1 PELET URANIUM (7 GRAM)  =  1.000 KG BATU BARA", cx, cy + 278);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "26px sans-serif";
+    ctx.fillText("Densitas Energi 2.000.000x Lipat Bahan Bakar Fosil", cx, cy + 322);
+    ctx.restore();
+
+    // Ilmuwan Dr. Arya menjelaskan sambil memegang bola atom
+    drawArticulatedHuman(ctx, {
+      x: 250,
+      y: 1210,
+      scale: 1.25,
+      role: "scientist",
+      emotion: "excited",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.65,
+      prop: "atom_orb",
+      facing: 1
+    });
+  } else if (sc.id === "scene_02") {
+    // Simulasi Tumbukan Neutron ke Inti U-235 & Terbelah Menjadi Barium + Krypton
+    const cycle = (localT % 6.5) / 6.5;
+    if (cycle < 0.42) {
+      // Fase 1: Neutron meluncur cepat menumbuk U-235
+      const p = easeInOutCubic(cycle / 0.42);
+      const neutronX = lerp(80, cx - 55, p);
+
+      // Jejak Neutron
+      ctx.strokeStyle = "#facc15";
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(neutronX - 95, cy);
+      ctx.lineTo(neutronX, cy);
+      ctx.stroke();
+
+      ctx.fillStyle = "#fef08a";
+      ctx.beginPath();
+      ctx.arc(neutronX, cy, 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Label Neutron
+      ctx.fillStyle = "#fef08a";
+      ctx.font = "bold 28px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("NEUTRON BEBAS (n⁰)", neutronX, cy - 38);
+
+      // Inti U-235 Bergetar
+      const shake = p > 0.8 ? (p - 0.8) * 55 : 4;
+      for (let k = 0; k < 36; k++) {
+        const ang = k * 2.4 + globalT * 2;
+        const r = Math.sqrt(k) * 14;
+        const px = cx + Math.cos(ang) * r + Math.sin(globalT * 40 + k) * shake;
+        const py = cy + Math.sin(ang) * r + Math.cos(globalT * 40 + k) * shake;
+        ctx.fillStyle = k % 2 === 0 ? "#f43f5e" : "#0ea5e9";
+        ctx.beginPath();
+        ctx.arc(px, py, 16, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 36px sans-serif";
+      ctx.fillText("INTI URANIUM-235 (92p + 143n)", cx, cy + 155);
+    } else {
+      // Fase 2: Fisi Nuklir! Terbelah menjadi Ba-141 & Kr-92 + Kilatan Energi + 3 Neutron Baru
+      const splitP = easeInOutCubic((cycle - 0.42) / 0.58);
+      const sep = splitP * 240;
+
+      // Gelombang Kejut Energi Fisi
+      ctx.strokeStyle = `rgba(250, 204, 21, ${(1 - splitP).toFixed(3)})`;
+      ctx.lineWidth = 14 * (1 - splitP);
+      ctx.beginPath();
+      ctx.arc(cx, cy, 40 + splitP * 380, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Dua Inti Hasil Belahan (Barium-141 & Krypton-92)
+      const drawCluster = (bx, by, label, count) => {
+        for (let k = 0; k < count; k++) {
+          const ang = k * 2.4 + globalT * 3;
+          const r = Math.sqrt(k) * 12;
+          ctx.fillStyle = k % 2 === 0 ? "#ef4444" : "#38bdf8";
+          ctx.beginPath();
+          ctx.arc(bx + Math.cos(ang) * r, by + Math.sin(ang) * r, 14, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = "#f8fafc";
+        ctx.font = "bold 30px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(label, bx, by + 105);
+      };
+
+      drawCluster(cx - sep, cy - sep * 0.35, "BARIUM-141", 18);
+      drawCluster(cx + sep, cy + sep * 0.35, "KRYPTON-92", 14);
+
+      // 3 Neutron Baru Terlontar
+      const angles = [-0.6, 0.1, 0.75];
+      angles.forEach((ang, idx) => {
+        const nr = splitP * 340;
+        const nx = cx + Math.cos(ang) * nr;
+        const ny = cy + Math.sin(ang) * nr;
+        ctx.fillStyle = "#fde047";
+        ctx.beginPath();
+        ctx.arc(nx, ny, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#fde047";
+        ctx.font = "bold 24px sans-serif";
+        ctx.fillText(`n⁰ #${idx + 1}`, nx, ny - 24);
+      });
+    }
+
+    drawArticulatedHuman(ctx, {
+      x: 230,
+      y: 1220,
+      scale: 1.22,
+      role: "scientist",
+      emotion: "normal",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.8,
+      prop: "pointer",
+      facing: 1
+    });
+  } else {
+    // Scene 03: Pohon Reaksi Berantai Eksponensial (1 -> 3 -> 9 -> 27) & Rumus E = mc^2
+    const levels = 4;
+    const treeTopY = 390;
+    const levelH = 145;
+    const animWave = (localT % 4.5) / 4.5;
+
+    for (let lv = 0; lv < levels; lv++) {
+      const count = Math.pow(2, lv);
+      const yPos = treeTopY + lv * levelH;
+      const spreadW = 760;
+
+      for (let idx = 0; idx < count; idx++) {
+        const xPos = cx - spreadW / 2 + ((idx + 0.5) / count) * spreadW;
+
+        if (lv < levels - 1) {
+          const nextCount = Math.pow(2, lv + 1);
+          const child1X = cx - spreadW / 2 + ((idx * 2 + 0.5) / nextCount) * spreadW;
+          const child2X = cx - spreadW / 2 + ((idx * 2 + 1.5) / nextCount) * spreadW;
+          const nextY = treeTopY + (lv + 1) * levelH;
+
+          ctx.strokeStyle = "rgba(247, 151, 30, 0.65)";
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(xPos, yPos);
+          ctx.lineTo(child1X, nextY);
+          ctx.moveTo(xPos, yPos);
+          ctx.lineTo(child2X, nextY);
+          ctx.stroke();
+
+          // Partikel neutron mengalir di sepanjang garis cabang
+          const pT = (animWave * 3 - lv * 0.4 + 3) % 1;
+          ctx.fillStyle = "#fef08a";
+          ctx.beginPath();
+          ctx.arc(lerp(xPos, child1X, pT), lerp(yPos, nextY, pT), 8, 0, Math.PI * 2);
+          ctx.arc(lerp(xPos, child2X, pT), lerp(yPos, nextY, pT), 8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Simpul Inti Uranium
+        const pulse = 1 + 0.2 * Math.sin(globalT * 6 - lv);
+        ctx.fillStyle = lv === levels - 1 ? "#ef4444" : "#f59e0b";
+        ctx.beginPath();
+        ctx.arc(xPos, yPos, 22 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Banner Hologram E = mc²
+    ctx.save();
+    ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+    ctx.strokeStyle = "#f59e0b";
+    ctx.lineWidth = 3;
+    drawRoundedRect(ctx, 220, 915, 640, 120, 24);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#fde047";
+    ctx.font = "bold 64px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("E = m · c²", cx, 995);
+    ctx.restore();
+
+    drawArticulatedHuman(ctx, {
+      x: 820,
+      y: 1220,
+      scale: 1.22,
+      role: "scientist",
+      emotion: "excited",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.75,
+      prop: "pointer",
+      facing: -1
+    });
+  }
+}
+
+// ADEGAN 4-5: CARA KERJA PLTN (TERAS REAKTOR, BATANG KENDALI, TURBIN UAP, MENARA PENDINGIN)
+function drawNuclearPlantStage(ctx, sc, localT, globalT, isSpeaking) {
+  if (sc.id === "scene_04") {
+    // Bejana Reaktor Terbuka dengan Batang Bahan Bakar & Batang Kendali Boron Naik-Turun
+    const rx = 280;
+    const ry = 370;
+    const rw = 520;
+    const rh = 560;
+
+    // Bejana Tekan Baja
+    ctx.fillStyle = "#1e293b";
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 6;
+    drawRoundedRect(ctx, rx, ry, rw, rh, 48);
+    ctx.fill();
+    ctx.stroke();
+
+    // Air Pendingin Berpendar Cherenkov Biru
+    const rodInsertion = 0.5 + 0.38 * Math.sin(globalT * 1.1); // 0 = cabut, 1 = masuk penuh
+    const reactivity = 1 - rodInsertion;
+    const waterGrad = ctx.createLinearGradient(rx, ry + 80, rx, ry + rh);
+    waterGrad.addColorStop(0, `rgba(0, 210, 255, ${(0.25 + reactivity * 0.45).toFixed(3)})`);
+    waterGrad.addColorStop(1, `rgba(255, 81, 47, ${(0.15 + reactivity * 0.55).toFixed(3)})`);
+    ctx.fillStyle = waterGrad;
+    drawRoundedRect(ctx, rx + 20, ry + 90, rw - 40, rh - 110, 32);
+    ctx.fill();
+
+    // 5 Batang Bahan Bakar Uranium-235 (Tetap)
+    for (let i = 0; i < 5; i++) {
+      const fx = rx + 65 + i * 95;
+      ctx.fillStyle = "#f97316";
+      drawRoundedRect(ctx, fx - 14, ry + 160, 28, 330, 8);
+      ctx.fill();
+      ctx.fillStyle = "#fef08a";
+      ctx.font = "bold 18px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("U-235", fx, ry + 518);
+    }
+
+    // 4 Batang Kendali Boron (Bergerak Naik-Turun Secara Dinamis)
+    const rodY = ry + 30 + rodInsertion * 180;
+    for (let i = 0; i < 4; i++) {
+      const cxRod = rx + 112 + i * 95;
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillRect(cxRod - 4, ry - 45, 8, rodY - (ry - 45));
+      ctx.fillStyle = "#0f172a";
+      ctx.strokeStyle = "#38ef7d";
+      ctx.lineWidth = 3;
+      drawRoundedRect(ctx, cxRod - 16, rodY, 32, 260, 6);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Panel Status Reaktivitas
+    ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+    drawRoundedRect(ctx, 140, 960, 800, 105, 18);
+    ctx.fill();
+    ctx.fillStyle = "#38ef7d";
+    ctx.font = "bold 30px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      `POSISI BATANG KENDALI BORON: ${Math.round(rodInsertion * 100)}%  |  SUHU TERAS: ${Math.round(280 + reactivity * 320)}°C`,
+      WIDTH / 2,
+      1022
+    );
+
+    drawArticulatedHuman(ctx, {
+      x: 210,
+      y: 1230,
+      scale: 1.2,
+      role: "scientist",
+      emotion: "normal",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.7,
+      prop: "pointer",
+      facing: 1
+    });
+  } else {
+    // Scene 05: Diagram Lengkap Siklus Uap PLTN -> Turbin -> Generator -> Menara Pendingin & Kota
+    // 1. Reaktor (Kiri)
+    ctx.fillStyle = "#1e293b";
+    ctx.strokeStyle = "#f97316";
+    ctx.lineWidth = 4;
+    drawRoundedRect(ctx, 80, 460, 190, 270, 24);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#fb923c";
+    ctx.font = "bold 24px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("REAKTOR", 175, 600);
+
+    // Pipa Uap Panas (Merah) menuju Turbin
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(270, 510);
+    ctx.lineTo(520, 510);
+    ctx.stroke();
+
+    // Partikel uap mengalir
+    for (let p = 0; p < 6; p++) {
+      const px = 280 + (((globalT * 140 + p * 42) % 230));
+      ctx.fillStyle = "#fde047";
+      ctx.beginPath();
+      ctx.arc(px, 510, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 2. Turbin Raksasa Berputar (Tengah)
+    const tx = 540;
+    const ty = 510;
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.fillStyle = "#0f172a";
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 92, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Bilah Turbin Berputar 60 FPS
+    ctx.rotate(globalT * 8.5);
+    for (let b = 0; b < 8; b++) {
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = "#38bdf8";
+      drawRoundedRect(ctx, -8, -82, 16, 70, 5);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 24px sans-serif";
+    ctx.fillText("TURBIN & GENERATOR", tx, ty + 132);
+
+    // 3. Menara Pendingin Hyperbolic (Kanan)
+    ctx.save();
+    ctx.fillStyle = "#475569";
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(760, 740);
+    ctx.quadraticCurveTo(805, 580, 785, 450);
+    ctx.lineTo(935, 450);
+    ctx.quadraticCurveTo(915, 580, 960, 740);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Kepulan Uap Air Bersih dari Menara Pendingin
+    for (let s = 0; s < 5; s++) {
+      const sy = 430 - ((globalT * 45 + s * 32) % 150);
+      const sr = 24 + ((430 - sy) * 0.25);
+      ctx.fillStyle = `rgba(241, 245, 249, ${(0.55 - (430 - sy) / 300).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(860 + Math.sin(globalT * 2 + s) * 18, sy, sr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 4. Siluet Gedung Kota Menyala Terang oleh Listrik Bersih
+    const cityY = 820;
+    const buildings = [
+      { x: 110, w: 95, h: 170 },
+      { x: 220, w: 115, h: 220 },
+      { x: 350, w: 90, h: 150 },
+      { x: 460, w: 130, h: 210 },
+      { x: 610, w: 105, h: 180 }
+    ];
+    buildings.forEach((b, bi) => {
+      ctx.fillStyle = "#0f172a";
+      ctx.strokeStyle = "#00f2fe";
+      ctx.lineWidth = 2;
+      ctx.fillRect(b.x, cityY + (220 - b.h), b.w, b.h);
+      ctx.strokeRect(b.x, cityY + (220 - b.h), b.w, b.h);
+
+      // Jendela gedung menyala
+      ctx.fillStyle = "#fde047";
+      for (let wy = cityY + (240 - b.h); wy < cityY + 200; wy += 28) {
+        for (let wx = b.x + 14; wx < b.x + b.w - 18; wx += 24) {
+          if ((wx + wy + bi) % 3 !== 0) {
+            ctx.fillRect(wx, wy, 12, 16);
+          }
+        }
+      }
+    });
+
+    drawArticulatedHuman(ctx, {
+      x: 830,
+      y: 1230,
+      scale: 1.2,
+      role: "scientist",
+      emotion: "excited",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.6,
+      prop: "clipboard",
+      facing: -1
+    });
+  }
+}
+
+// ADEGAN 6-10: KRONOLOGI PENYEBAB CHERNOBYL (RUANG KONTROL, XENON-135, KOEFISIEN RONGGA, AZ-5, LEDAKAN!)
+function drawChernobylDisasterStage(ctx, sc, localT, globalT, isSpeaking) {
+  const cx = WIDTH / 2;
+
+  if (sc.id === "scene_06" || sc.id === "scene_07" || sc.id === "scene_09") {
+    // Ruang Kontrol Reaktor Nomor 4 Chernobyl & Panel RBMK-1000
+    ctx.fillStyle = "#1e293b";
+    ctx.strokeStyle = sc.id === "scene_09" ? "#ef4444" : "#64748b";
+    ctx.lineWidth = 5;
+    drawRoundedRect(ctx, 70, 360, 940, 480, 24);
+    ctx.fill();
+    ctx.stroke();
+
+    // Peta Indikator Bundar Teras RBMK (Selsyn Dial Map di Dinding Ruang Kontrol)
+    const mapX = 310;
+    const mapY = 585;
+    ctx.fillStyle = "#0f172a";
+    ctx.beginPath();
+    ctx.arc(mapX, mapY, 155, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (let gx = -4; gx <= 4; gx++) {
+      for (let gy = -4; gy <= 4; gy++) {
+        if (gx * gx + gy * gy <= 18) {
+          const cellX = mapX + gx * 28;
+          const cellY = mapY + gy * 28;
+          const isHot =
+            sc.id === "scene_09"
+              ? Math.sin(globalT * 18 + gx * gy) > -0.2
+              : sc.id === "scene_07"
+              ? (gx + gy) % 4 === 0
+              : true;
+          ctx.fillStyle =
+            sc.id === "scene_09"
+              ? isHot
+                ? "#ef4444"
+                : "#f97316"
+              : sc.id === "scene_07"
+              ? isHot
+                ? "#a855f7"
+                : "#1e293b"
+              : "#38bdf8";
+          ctx.fillRect(cellX - 10, cellY - 10, 20, 20);
+        }
+      }
+    }
+
+    // Meteran Daya Termal Reaktor (MW) & Racun Xenon-135
+    let displayedMw = sc.powerMw;
+    if (sc.id === "scene_09") {
+      const surge = easeInOutCubic(clamp((localT - 3.0) / 12.0, 0, 1));
+      displayedMw = Math.round(200 + surge * 32800);
+    }
+
+    ctx.fillStyle = "#090d16";
+    drawRoundedRect(ctx, 520, 410, 440, 180, 16);
+    ctx.fill();
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "bold 24px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("DAYA TERMAL REAKTOR UNIT 4", 740, 452);
+
+    ctx.fillStyle = sc.id === "scene_09" ? "#ef4444" : sc.id === "scene_07" ? "#f97316" : "#38ef7d";
+    ctx.font = "bold 66px monospace";
+    ctx.fillText(`${displayedMw.toLocaleString("id-ID")} MW`, 740, 535);
+
+    if (sc.id === "scene_07") {
+      // Visualisasi Akumulasi Gas Racun Xenon-135 (Ungu)
+      ctx.fillStyle = "rgba(88, 28, 135, 0.85)";
+      drawRoundedRect(ctx, 520, 620, 440, 180, 16);
+      ctx.fill();
+      ctx.fillStyle = "#e9d5ff";
+      ctx.font = "bold 28px sans-serif";
+      ctx.fillText("AKUMULASI RACUN XENON-135", 740, 672);
+      ctx.font = "23px sans-serif";
+      ctx.fillText("Menyerap Neutron & Mencekik Teras!", 740, 718);
+    } else if (sc.id === "scene_09") {
+      // Tombol Darurat AZ-5 (SCRAM) Ditekan & Ilustrasi Ujung Grafit
+      const isPressed = localT > 2.2;
+      ctx.fillStyle = "#1e293b";
+      drawRoundedRect(ctx, 520, 620, 440, 190, 16);
+      ctx.fill();
+
+      // Tombol Merah AZ-5
+      ctx.fillStyle = isPressed ? "#ff0000" : "#7f1d1d";
+      ctx.beginPath();
+      ctx.arc(610, 715, isPressed ? 44 : 48, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 28px sans-serif";
+      ctx.fillText("AZ-5", 610, 725);
+
+      ctx.fillStyle = "#fca5a5";
+      ctx.font = "bold 25px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("UJUNG GRAFIT TURUN:", 680, 690);
+      ctx.fillStyle = "#fde047";
+      ctx.font = "bold 23px sans-serif";
+      ctx.fillText("Memicu Lonjakan 100x!", 680, 735);
+    } else {
+      // Scene 06: Status Tes Keamanan Turbin RBMK-1000
+      ctx.fillStyle = "#0f172a";
+      drawRoundedRect(ctx, 520, 620, 440, 180, 16);
+      ctx.fill();
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "bold 26px sans-serif";
+      ctx.fillText("JADWAL UJI COBA TURBIN", 740, 680);
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "23px sans-serif";
+      ctx.fillText("Tertunda 10 Jam -> Kru Malam Masuk", 740, 728);
+    }
+
+    // Dua Karakter Operator Chernobyl (Akimov & Toptunov) + Narator
+    drawArticulatedHuman(ctx, {
+      x: 260,
+      y: 1230,
+      scale: 1.15,
+      role: "operator",
+      emotion: sc.id === "scene_09" ? "panicked" : "shocked",
+      isSpeaking: false,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.9,
+      prop: "none",
+      facing: 1
+    });
+
+    drawArticulatedHuman(ctx, {
+      x: 790,
+      y: 1230,
+      scale: 1.2,
+      role: "scientist",
+      emotion: sc.id === "scene_09" ? "shocked" : "somber",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.65,
+      prop: "pointer",
+      facing: -1
+    });
+  } else if (sc.id === "scene_08") {
+    // Scene 08: Ilustrasi Teknis Koefisien Rongga Positif (Positive Void Coefficient) & Ujung Grafit
+    const boxX = 120;
+    const boxY = 370;
+    const boxW = 840;
+    const boxH = 620;
+
+    ctx.fillStyle = "#0f172a";
+    ctx.strokeStyle = "#f43f5e";
+    ctx.lineWidth = 4;
+    drawRoundedRect(ctx, boxX, boxY, boxW, boxH, 28);
+    ctx.fill();
+    ctx.stroke();
+
+    // 3 Saluran Pipa Bahan Bakar RBMK dengan Blok Moderator Grafit di Kiri-Kanan
+    for (let c = 0; c < 3; c++) {
+      const chX = 260 + c * 280;
+
+      // Blok Moderator Grafit Abu-Abu Gelap
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(chX - 110, boxY + 70, 55, 480);
+      ctx.fillRect(chX + 55, boxY + 70, 55, 480);
+
+      // Saluran Air Mendidih
+      ctx.fillStyle = "rgba(14, 165, 233, 0.35)";
+      ctx.fillRect(chX - 50, boxY + 70, 100, 480);
+
+      // Gelembung Uap (Void Bubbles) Naik Cepat
+      for (let b = 0; b < 9; b++) {
+        const by = boxY + 530 - ((globalT * 160 + b * 55 + c * 30) % 450);
+        const bx = chX + Math.sin(globalT * 5 + b) * 22;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
+        ctx.beginPath();
+        ctx.arc(bx, by, 14 + (b % 3) * 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Batang Kendali Dicabut ke Atas + Ujung Displacer Grafit di Bawahnya
+      const rodTop = boxY + 95;
+      ctx.fillStyle = "#10b981"; // Bagian penyerap Boron (di atas luar teras!)
+      ctx.fillRect(chX - 16, rodTop, 32, 95);
+      ctx.fillStyle = "#f59e0b"; // Ujung Displacer Grafit!
+      ctx.fillRect(chX - 16, rodTop + 125, 32, 110);
+    }
+
+    ctx.fillStyle = "#fde047";
+    ctx.font = "bold 28px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("GELEMBUNG UAP NAIK -> DAYA NAIK -> MAKIN BANYAK UAP!", cx, boxY + 585);
+
+    drawArticulatedHuman(ctx, {
+      x: 240,
+      y: 1230,
+      scale: 1.2,
+      role: "scientist",
+      emotion: "shocked",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.8,
+      prop: "pointer",
+      facing: 1
+    });
+  } else {
+    // Scene 10: PUKUL 01:23:45 — LEDAKAN REAKTOR NOMOR 4 CHERNOBYL & SINAR BIRU IONISASI
+    const groundY = 930;
+
+    // Pancaran Sinar Biru Ionisasi Udara (Cherenkov / Ionized Air Glow) Menembus Langit
+    const beamGrad = ctx.createLinearGradient(cx - 140, groundY - 260, cx + 140, 120);
+    beamGrad.addColorStop(0, "rgba(0, 242, 254, 0.85)");
+    beamGrad.addColorStop(0.5, "rgba(56, 189, 248, 0.35)");
+    beamGrad.addColorStop(1, "rgba(0, 242, 254, 0)");
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(cx - 95, groundY - 220);
+    ctx.lineTo(cx - 240, 180);
+    ctx.lineTo(cx + 240, 180);
+    ctx.lineTo(cx + 95, groundY - 220);
+    ctx.closePath();
+    ctx.fill();
+
+    // Bola Api & Kepulan Asap Grafit Radioaktif
+    for (let f = 0; f < 14; f++) {
+      const age = (globalT * 0.8 + f * 0.22) % 2.4;
+      const fy = groundY - 210 - age * 210;
+      const fx = cx + Math.sin(f * 3.1 + globalT * 2) * (40 + age * 65);
+      const fr = 48 + age * 45;
+      ctx.fillStyle =
+        age < 0.7
+          ? `rgba(255, 200, 30, ${(0.85 - age * 0.5).toFixed(3)})`
+          : age < 1.4
+          ? `rgba(239, 68, 68, ${(0.7 - (age - 0.7) * 0.5).toFixed(3)})`
+          : `rgba(30, 41, 59, ${(0.75 - (age - 1.4) * 0.6).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(fx, fy, fr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Gedung Reaktor Nomor 4 yang Hancur Terkoyak + Cerobong Vent Stack Ikonik
+    ctx.fillStyle = "#334155";
+    ctx.fillRect(160, groundY - 240, 760, 240);
+
+    // Reruntuhan Atap & Tutup Biologis "Elena" (2.000 Ton) yang Miring
+    ctx.save();
+    ctx.translate(cx, groundY - 230);
+    ctx.rotate(-0.42);
+    ctx.fillStyle = "#64748b";
+    ctx.strokeStyle = "#f97316";
+    ctx.lineWidth = 4;
+    ctx.fillRect(-115, -24, 230, 48);
+    ctx.strokeRect(-115, -24, 230, 48);
+    ctx.restore();
+
+    // Cerobong Merah-Putih Chernobyl di atas gedung
+    const chX = cx + 180;
+    for (let seg = 0; seg < 6; seg++) {
+      ctx.fillStyle = seg % 2 === 0 ? "#dc2626" : "#f8fafc";
+      ctx.fillRect(chX - 18, groundY - 240 - (seg + 1) * 42, 36, 42);
+    }
+
+    drawArticulatedHuman(ctx, {
+      x: 220,
+      y: 1230,
+      scale: 1.2,
+      role: "operator",
+      emotion: "panicked",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.8,
+      prop: "none",
+      facing: 1
+    });
+  }
+}
+
+// ADEGAN 11-15: DAMPAK CHERNOBYL, PEMADAM, LIKUIDATOR, PRIPYAT, DAN NEW SAFE CONFINEMENT
+function drawAftermathAndFutureStage(ctx, sc, localT, globalT, isSpeaking) {
+  const cx = WIDTH / 2;
+
+  if (sc.id === "scene_11") {
+    // Scene 11: Pemadam Kebakaran Heroik & Untaian Heliks Ganda DNA yang Terputus oleh Sinar Gamma
+    const dnaX = 680;
+    const dnaTop = 390;
+    const dnaH = 520;
+
+    // Gelombang Sinar Gamma Menembus DNA
+    for (let g = 0; g < 5; g++) {
+      const gy = dnaTop + 70 + g * 95;
+      ctx.strokeStyle = "#facc15";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      for (let wx = 120; wx < dnaX - 40; wx += 12) {
+        const wy = gy + Math.sin(wx * 0.18 - globalT * 16) * 14;
+        if (wx === 120) ctx.moveTo(wx, wy);
+        else ctx.lineTo(wx, wy);
+      }
+      ctx.stroke();
+    }
+
+    // Heliks Ganda DNA dengan Ikatan yang Patah Akibat Radiasi Pengion
+    for (let i = 0; i < 18; i++) {
+      const y = dnaTop + (i / 18) * dnaH;
+      const phase = i * 0.48 + globalT * 3.2;
+      const x1 = dnaX + Math.sin(phase) * 95;
+      const x2 = dnaX - Math.sin(phase) * 95;
+
+      const isBroken = i === 7 || i === 12;
+      ctx.strokeStyle = isBroken ? "#ef4444" : "#38bdf8";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      if (isBroken) {
+        ctx.moveTo(x1, y);
+        ctx.lineTo((x1 + x2) / 2 - 22, y - 14);
+        ctx.moveTo((x1 + x2) / 2 + 22, y + 14);
+        ctx.lineTo(x2, y);
+      } else {
+        ctx.moveTo(x1, y);
+        ctx.lineTo(x2, y);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = isBroken ? "#f43f5e" : "#00f2fe";
+      ctx.beginPath();
+      ctx.arc(x1, y, 10, 0, Math.PI * 2);
+      ctx.arc(x2, y, 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = "#fca5a5";
+    ctx.font = "bold 28px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("IONISASI SINAR GAMMA MEMUTUS RANTAI DNA SEL", cx, 975);
+
+    drawArticulatedHuman(ctx, {
+      x: 260,
+      y: 1230,
+      scale: 1.22,
+      role: "firefighter",
+      emotion: "somber",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.5,
+      prop: "geiger",
+      facing: 1
+    });
+  } else if (sc.id === "scene_12") {
+    // Scene 12: Helikopter Mi-8 Menjatuhkan Boron & Timbal ke Kawah Teras + Likuidator
+    const heliX = cx + Math.sin(globalT * 1.4) * 140;
+    const heliY = 460 + Math.cos(globalT * 2.8) * 16;
+
+    // Badan Helikopter Mi-8
+    ctx.save();
+    ctx.translate(heliX, heliY);
+    ctx.fillStyle = "#4d7c0f";
+    drawRoundedRect(ctx, -110, -36, 190, 72, 28);
+    ctx.fill();
+    ctx.fillRect(-230, -18, 130, 22);
+    // Kaca Kokpit
+    ctx.fillStyle = "#38bdf8";
+    drawRoundedRect(ctx, 25, -26, 48, 34, 10);
+    ctx.fill();
+    // Baling-baling Utama Berputar Cepat
+    const rotorW = 240 * Math.cos(globalT * 32);
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-rotorW, -48);
+    ctx.lineTo(rotorW, -48);
+    ctx.stroke();
+    ctx.restore();
+
+    // Karung Pasir, Timbal & Boron Jatuh ke Kawah Reaktor yang Membara
+    for (let d = 0; d < 8; d++) {
+      const dropP = ((globalT * 0.9 + d * 0.125) % 1);
+      const dx = lerp(heliX, cx + (d - 3.5) * 24, dropP);
+      const dy = lerp(heliY + 45, 890, dropP * dropP);
+      ctx.fillStyle = "#eab308";
+      ctx.beginPath();
+      ctx.arc(dx, dy, 11, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Kawah Reaktor Membara di Bawah
+    const craterGrad = ctx.createRadialGradient(cx, 920, 20, cx, 920, 260);
+    craterGrad.addColorStop(0, "#fef08a");
+    craterGrad.addColorStop(0.4, "#ef4444");
+    craterGrad.addColorStop(1, "rgba(239, 68, 68, 0)");
+    ctx.fillStyle = craterGrad;
+    ctx.beginPath();
+    ctx.arc(cx, 920, 260, Math.PI, Math.PI * 2);
+    ctx.fill();
+
+    drawArticulatedHuman(ctx, {
+      x: 240,
+      y: 1230,
+      scale: 1.22,
+      role: "liquidator",
+      emotion: "somber",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.6,
+      prop: "geiger",
+      facing: 1
+    });
+  } else if (sc.id === "scene_13") {
+    // Scene 13: Bianglala Ikonik Kota Hantu Pripyat, Hutan Merah (Red Forest), & Konvoi Bus Evakuasi
+    const wheelX = 330;
+    const wheelY = 580;
+    const wheelR = 165;
+
+    // Bianglala Pripyat
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(wheelX, wheelY, wheelR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    for (let s = 0; s < 12; s++) {
+      const ang = (s * Math.PI) / 6 + globalT * 0.12;
+      const gx = wheelX + Math.cos(ang) * wheelR;
+      const gy = wheelY + Math.sin(ang) * wheelR;
+      ctx.strokeStyle = "#64748b";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(wheelX, wheelY);
+      ctx.lineTo(gx, gy);
+      ctx.stroke();
+
+      // Kabin Kuning Bianglala Pripyat
+      ctx.fillStyle = "#eab308";
+      drawRoundedRect(ctx, gx - 16, gy, 32, 24, 6);
+      ctx.fill();
+    }
+
+    // Kaki Penyangga Bianglala
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(wheelX - 95, 840);
+    ctx.lineTo(wheelX, wheelY);
+    ctx.lineTo(wheelX + 95, 840);
+    ctx.stroke();
+
+    // Pohon-Pohon Pinus Hutan Merah (Red Forest) di Kanan
+    for (let tIdx = 0; tIdx < 4; tIdx++) {
+      const tx = 650 + tIdx * 95;
+      const ty = 840;
+      ctx.fillStyle = "#451a03";
+      ctx.fillRect(tx - 10, ty - 70, 20, 70);
+      ctx.fillStyle = "#b91c1c"; // Daun pinus mati berubah merah karat
+      ctx.beginPath();
+      ctx.moveTo(tx, ty - 220);
+      ctx.lineTo(tx - 48, ty - 65);
+      ctx.lineTo(tx + 48, ty - 65);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Konvoi Bus Evakuasi Bergerak
+    const busX = ((localT * 110) % 1200) - 150;
+    ctx.fillStyle = "#f97316";
+    drawRoundedRect(ctx, busX, 855, 190, 68, 12);
+    ctx.fill();
+    ctx.fillStyle = "#fef08a";
+    for (let w = 0; w < 5; w++) {
+      ctx.fillRect(busX + 18 + w * 34, 868, 24, 22);
+    }
+
+    drawArticulatedHuman(ctx, {
+      x: 820,
+      y: 1230,
+      scale: 1.2,
+      role: "scientist",
+      emotion: "somber",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.5,
+      prop: "geiger",
+      facing: -1
+    });
+  } else {
+    // Scene 14 & 15: Kubah Baja New Safe Confinement & Masa Depan Energi Bersih
+    const archY = 860;
+    const slideProgress = sc.id === "scene_14" ? easeInOutCubic(clamp(localT / 8.0, 0, 1)) : 1.0;
+
+    // Sarkofagus Lama di Tengah
+    ctx.fillStyle = "#475569";
+    ctx.fillRect(cx - 170, archY - 210, 340, 210);
+
+    // Struktur Kubah Lengkung Baja "New Safe Confinement" Bergeser Menutupi Reaktor
+    const archX = lerp(cx - 320, cx, slideProgress);
+    ctx.save();
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.fillStyle = "rgba(148, 163, 184, 0.88)";
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(archX, archY, 310, Math.PI, Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Rangka Baja Kubah (Truss Grid)
+    ctx.strokeStyle = "#0ea5e9";
+    ctx.lineWidth = 3;
+    for (let a = 1; a < 8; a++) {
+      const radAngle = Math.PI + (a * Math.PI) / 8;
+      ctx.beginPath();
+      ctx.moveTo(archX, archY);
+      ctx.lineTo(archX + Math.cos(radAngle) * 310, archY + Math.sin(radAngle) * 310);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.fillStyle = "#38ef7d";
+    ctx.font = "bold 30px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      sc.id === "scene_14"
+        ? "NEW SAFE CONFINEMENT (36.000 TON BAJA PELINDUNG)"
+        : "ENERGI NUKLIR MODERN: BERSIH, AMAN & BERKELANJUTAN",
+      cx,
+      935
+    );
+
+    drawArticulatedHuman(ctx, {
+      x: cx,
+      y: 1230,
+      scale: 1.24,
+      role: "scientist",
+      emotion: "excited",
+      isSpeaking,
+      speechPhase: globalT,
+      time: globalT,
+      pointAngle: -0.65,
+      prop: sc.id === "scene_15" ? "atom_orb" : "clipboard",
+      facing: 1
+    });
+  }
+}
+
+// ============================================================================
+// HUD TELEMETRI, HEADER SINEMATIK & SUBTITLE KARAOKE 9:16
+// ============================================================================
+function drawHudAndSubtitles(ctx, sc, globalT, totalDurationSec) {
+  // 1. Header Atas (Babak, Judul Adegan, Timestamp, & Geiger Counter)
+  ctx.save();
+  ctx.fillStyle = "rgba(9, 13, 22, 0.86)";
+  ctx.strokeStyle = sc.themeColor;
+  ctx.lineWidth = 3;
+  drawRoundedRect(ctx, 48, 56, WIDTH - 96, 225, 26);
+  ctx.fill();
+  ctx.stroke();
+
+  // Badge Babak
+  ctx.fillStyle = sc.themeColor;
+  drawRoundedRect(ctx, 82, 82, 490, 44, 12);
+  ctx.fill();
+  ctx.fillStyle = "#090d16";
+  ctx.font = "bold 23px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(sc.act, 102, 112);
+
+  // Indikator Geiger Counter Live di Kanan Atas
+  const liveCpm = Math.max(
+    12,
+    Math.round(sc.geigerCpm + Math.sin(globalT * 11) * (sc.geigerCpm * 0.08 + 2))
+  );
+  ctx.fillStyle = sc.geigerCpm > 1000 ? "#ef4444" : "#facc15";
+  ctx.font = "bold 25px monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(`☢ GEIGER: ${liveCpm.toLocaleString("id-ID")} CPM`, WIDTH - 82, 112);
+
+  // Judul Adegan
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "bold 40px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(sc.title, 82, 178);
+
+  // Label Waktu / Lokasi
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "bold 25px monospace";
+  ctx.fillText(`📍 ${sc.timeLabel}`, 82, 232);
+  ctx.restore();
+
+  // 2. Kotak Subtitle Dinamis (Karaoke Highlight Kata demi Kata) di Bagian Bawah 9:16
+  ctx.save();
+  const subBoxX = 54;
+  const subBoxY = 1445;
+  const subBoxW = WIDTH - 108;
+  const subBoxH = 365;
+
+  ctx.fillStyle = "rgba(9, 13, 22, 0.9)";
+  ctx.strokeStyle = sc.themeColor;
+  ctx.lineWidth = 3;
+  drawRoundedRect(ctx, subBoxX, subBoxY, subBoxW, subBoxH, 28);
+  ctx.fill();
+  ctx.stroke();
+
+  // Cari indeks kata yang sedang diucapkan saat ini
+  const timings = sc.wordTimings || [];
+  let activeWordIdx = -1;
+  for (let i = 0; i < timings.length; i++) {
+    if (globalT >= timings[i].start && globalT <= timings[i].end) {
+      activeWordIdx = i;
+      break;
+    } else if (globalT > timings[i].end) {
+      activeWordIdx = i;
+    }
+  }
+
+  // Tampilkan jendela 14 kata di sekitar kata aktif agar teks besar, jelas, dan mudah dibaca di 9:16
+  const chunkSize = 14;
+  const chunkIndex = Math.max(0, Math.floor(Math.max(0, activeWordIdx) / chunkSize));
+  const sliceStart = chunkIndex * chunkSize;
+  const visibleWords = timings.slice(sliceStart, sliceStart + chunkSize);
+
+  ctx.font = "bold 42px sans-serif";
+  const maxLineWidth = subBoxW - 90;
+  const lines = [];
+  let currentLine = [];
+  let currentWidth = 0;
+
+  visibleWords.forEach((wObj, idx) => {
+    const absIdx = sliceStart + idx;
+    const wordStr = wObj.word + " ";
+    const wWidth = ctx.measureText(wordStr).width;
+    if (currentWidth + wWidth > maxLineWidth && currentLine.length > 0) {
+      lines.push(currentLine);
+      currentLine = [];
+      currentWidth = 0;
+    }
+    currentLine.push({ ...wObj, absIdx, wordStr, wWidth });
+    currentWidth += wWidth;
+  });
+  if (currentLine.length > 0) {
+    lines.push(currentLine);
+  }
+
+  const lineHeight = 64;
+  const startTextY = subBoxY + (subBoxH - lines.length * lineHeight) / 2 + 42;
+
+  lines.forEach((line, lIdx) => {
+    const totalLineW = line.reduce((acc, item) => acc + item.wWidth, 0);
+    let cursorX = subBoxX + (subBoxW - totalLineW) / 2;
+    const yPos = startTextY + lIdx * lineHeight;
+
+    line.forEach((item) => {
+      const isCurrent = item.absIdx === activeWordIdx && globalT >= sc.voiceStartTime && globalT <= sc.voiceEndTime;
+      const isSpoken = item.absIdx < activeWordIdx || globalT > sc.voiceEndTime;
+
+      if (isCurrent) {
+        ctx.fillStyle = sc.themeColor;
+        drawRoundedRect(ctx, cursorX - 6, yPos - 40, item.wWidth + 4, 52, 10);
+        ctx.fill();
+        ctx.fillStyle = "#090d16";
+      } else if (isSpoken) {
+        ctx.fillStyle = "#ffffff";
+      } else {
+        ctx.fillStyle = "#94a3b8";
+      }
+
+      ctx.textAlign = "left";
+      ctx.fillText(item.wordStr, cursorX, yPos);
+      cursorX += item.wWidth;
+    });
+  });
+  ctx.restore();
+
+  // 3. Progress Bar Durasi Video 5 Menit di Paling Bawah
+  const overallProgress = clamp(globalT / totalDurationSec, 0, 1);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.14)";
+  ctx.fillRect(54, 1845, WIDTH - 108, 14);
+  ctx.fillStyle = sc.themeColor;
+  ctx.fillRect(54, 1845, (WIDTH - 108) * overallProgress, 14);
+}
+
+// ============================================================================
+// RENDER FRAME TUNGGAL (60 FPS)
+// ============================================================================
+function renderFrame(ctx, sceneIdx, globalT, totalDurationSec) {
+  const sc = SCENES[sceneIdx];
+  const localT = globalT - sc.startTime;
+  const sceneProgress = clamp(localT / sc.duration, 0, 1);
+  const isSpeaking = globalT >= sc.voiceStartTime && globalT <= sc.voiceEndTime;
+
+  ctx.save();
+
+  // Latar Belakang Gradien Dinamis
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+  if (sceneIdx >= 5 && sceneIdx <= 10) {
+    bgGrad.addColorStop(0, "#09040a");
+    bgGrad.addColorStop(0.5, "#1f0916");
+    bgGrad.addColorStop(1, "#090d16");
+  } else {
+    bgGrad.addColorStop(0, "#040814");
+    bgGrad.addColorStop(0.5, "#0b192c");
+    bgGrad.addColorStop(1, "#050b14");
+  }
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  // Efek Kamera Zoom & Guncangan (Screen Shake saat Ledakan Chernobyl Scene 9-10)
+  const zoom = lerp(1.0, sc.cameraZoom || 1.05, sceneProgress);
+  let shakeX = 0;
+  let shakeY = 0;
+  if (sc.id === "scene_10" && localT >= 1.0 && localT <= 9.5) {
+    const intensity = localT < 4.5 ? 18 : 26 * Math.exp(-(localT - 4.0) * 0.45);
+    shakeX = Math.sin(globalT * 65) * intensity;
+    shakeY = Math.cos(globalT * 78) * intensity;
+  } else if (sc.id === "scene_09" && localT > 8.0) {
+    shakeX = Math.sin(globalT * 45) * 6;
+    shakeY = Math.cos(globalT * 52) * 6;
+  }
+
+  ctx.save();
+  ctx.translate(WIDTH / 2 + shakeX, HEIGHT / 2 + shakeY);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-WIDTH / 2, -HEIGHT / 2);
+
+  // Lantai Panggung Laboratorium / Ruang Reaktor
+  ctx.fillStyle = "rgba(15, 23, 42, 0.78)";
+  ctx.fillRect(0, 1340, WIDTH, HEIGHT - 1340);
+  ctx.strokeStyle = sc.themeColor;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, 1340);
+  ctx.lineTo(WIDTH, 1340);
+  ctx.stroke();
+
+  // Partikel Atmosferik / Debu Radiasi Melayang
+  for (let p = 0; p < 24; p++) {
+    const px = ((p * 173 + globalT * 28 * ((p % 3) + 1)) % WIDTH);
+    const py = ((p * 293 - globalT * 36 * ((p % 2) + 1)) % HEIGHT + HEIGHT) % HEIGHT;
+    ctx.fillStyle =
+      sceneIdx >= 9 && sceneIdx <= 12
+        ? "rgba(250, 204, 21, 0.35)"
+        : "rgba(56, 189, 248, 0.22)";
+    ctx.beginPath();
+    ctx.arc(px, py, 2.5 + (p % 4), 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Kacamata Frame Tipis Modern (Khas Dosen/Instruktur Teknik)
-  ctx.strokeStyle = "#334155";
-  ctx.lineWidth = 2.2;
-  drawRoundedRect(ctx, -18, -12, 22, 16, 4);
-  ctx.stroke();
-  drawRoundedRect(ctx, 8, -12, 22, 16, 4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(4, -5);
-  ctx.lineTo(8, -5);
-  ctx.moveTo(-18, -5);
-  ctx.lineTo(-36, -2);
-  ctx.stroke();
-
-  // Hidung
-  ctx.strokeStyle = "#c68642";
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(6, -4);
-  ctx.lineTo(11, 10);
-  ctx.lineTo(4, 12);
-  ctx.stroke();
-
-  // Mulut Lip-Sync (Sinkron dengan Suara Narasi)
-  const mouthOpen = isSpeaking
-    ? Math.abs(Math.sin(globalTime * 11.5)) * 7.5 + Math.abs(Math.cos(globalTime * 7.3)) * 4.0
-    : 1.2;
-
-  ctx.fillStyle = "#7f1d1d";
-  ctx.beginPath();
-  ctx.ellipse(6, 25, 11, Math.max(2, mouthOpen), 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  if (mouthOpen > 4) {
-    // Gigi atas
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(-2, 20, 16, 4);
+  // Gambar Panggung Utama Sesuai Babak Cerita
+  if (sceneIdx <= 2) {
+    drawAtomicPhysicsStage(ctx, sc, localT, globalT, isSpeaking);
+  } else if (sceneIdx <= 4) {
+    drawNuclearPlantStage(ctx, sc, localT, globalT, isSpeaking);
+  } else if (sceneIdx <= 9) {
+    drawChernobylDisasterStage(ctx, sc, localT, globalT, isSpeaking);
+  } else {
+    drawAftermathAndFutureStage(ctx, sc, localT, globalT, isSpeaking);
   }
 
-  ctx.restore(); // Selesai transformasi kepala
+  ctx.restore(); // Akhir transformasi kamera panggung
 
-  // --- LENGAN KANAN + TANGAN + TONGKAT PENUNJUK / SPIDOL (IK AKTIF KE PAPAN TULIS) ---
-  const rightShoulderX = hipX + 46;
-  const rightShoulderY = torsoTopY + 26;
-
-  // Hitung titik tangan kanan agar mengarah ke target di papan tulis, lalu tongkat penunjuk menjangkau titik tepat di papan
-  const dxBoard = pointerTarget.x - rightShoulderX;
-  const dyBoard = pointerTarget.y - rightShoulderY;
-  const angleToBoard = Math.atan2(dyBoard, dxBoard);
-  const maxHandReach = 148;
-  const distToBoard = Math.hypot(dxBoard, dyBoard);
-
-  // Jarak ujung tangan kanan
-  const handReachDist = Math.min(maxHandReach, distToBoard * 0.45);
-  const handTargetX = rightShoulderX + Math.cos(angleToBoard) * handReachDist;
-  const handTargetY = rightShoulderY + Math.sin(angleToBoard) * handReachDist +
-    (pointerTarget.isDrawing ? Math.sin(globalTime * 18) * 3 : 0);
-
-  const rightArm = solveArmIK(rightShoulderX, rightShoulderY, handTargetX, handTargetY, 82, 78, 1);
-
-  // Gambar Lengan Kanan (Bahu -> Siku -> Pergelangan Tangan)
-  ctx.strokeStyle = "#1d4ed8";
-  ctx.lineWidth = 24;
-  ctx.beginPath();
-  ctx.moveTo(rightShoulderX, rightShoulderY);
-  ctx.lineTo(rightArm.elbowX, rightArm.elbowY);
-  ctx.lineTo(rightArm.handX, rightArm.handY);
-  ctx.stroke();
-
-  // Manset Putih Kemeja di Pergelangan
-  ctx.fillStyle = "#f8fafc";
-  ctx.beginPath();
-  ctx.arc(rightArm.handX, rightArm.handY, 13, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Tongkat Penunjuk Teleskopik / Spidol Teknik yang Menyentuh Titik Aktif di Papan Tulis
-  const tipX = pointerTarget.x;
-  const tipY = pointerTarget.y;
-
-  // Batang penunjuk metalik dari tangan kanan ke titik papan tulis
-  ctx.strokeStyle = "#475569";
-  ctx.lineWidth = 4.5;
-  ctx.beginPath();
-  ctx.moveTo(rightArm.handX, rightArm.handY);
-  ctx.lineTo(tipX, tipY);
-  ctx.stroke();
-
-  // Ujung Penunjuk Berkilau (Merah menyala saat menggambar/menunjuk)
-  ctx.fillStyle = pointerTarget.isDrawing ? "#ef4444" : "#f59e0b";
-  ctx.beginPath();
-  ctx.arc(tipX, tipY, 7, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "rgba(239, 68, 68, 0.45)";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(tipX, tipY, 14 + Math.sin(globalTime * 10) * 3, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Telapak Tangan Kanan Memegang Penunjuk
-  ctx.fillStyle = "#f1c27d";
-  ctx.beginPath();
-  ctx.arc(rightArm.handX, rightArm.handY, 11.5, 0, Math.PI * 2);
-  ctx.fill();
+  // Gambar HUD & Subtitle Karaoke
+  drawHudAndSubtitles(ctx, sc, globalT, totalDurationSec);
 
   ctx.restore();
 }
 
 // ============================================================================
-// CAPTION RINGKAS & TIDAK BERLEBIHAN (HANYA SATU BARIS PENDEK SAAT BICARA,
-// TANPA TEKS BANNER ATAS MAUPUN BAWAH)
-// ============================================================================
-function drawMinimalCaption(ctx, narrationText, voiceProgress, isSpeaking) {
-  if (!isSpeaking || !narrationText) return;
-
-  const words = narrationText.trim().split(/\s+/);
-  const chunkSize = 7; // Maksimal 7 kata per potongan agar ringkas & tidak berlebihan
-  const totalChunks = Math.ceil(words.length / chunkSize);
-  const chunkIdx = clamp(Math.floor(voiceProgress * totalChunks), 0, totalChunks - 1);
-  const activePhrase = words.slice(chunkIdx * chunkSize, (chunkIdx + 1) * chunkSize).join(" ");
-
-  ctx.save();
-  ctx.font = "600 22px sans-serif";
-  const textWidth = ctx.measureText(activePhrase).width;
-  const pillW = textWidth + 44;
-  const pillH = 44;
-  const pillX = 340 + (1510 - pillW) / 2;
-  const pillY = 930; // Di area lantai bawah papan tulis, bersih dan tidak menutupi gambar
-
-  ctx.fillStyle = "rgba(15, 23, 42, 0.76)";
-  drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 22);
-  ctx.fill();
-
-  ctx.fillStyle = "#f8fafc";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(activePhrase, pillX + pillW / 2, pillY + pillH / 2 + 1);
-  ctx.restore();
-}
-
-// ============================================================================
-// PIPELINE RENDER UTAMA (STREAMING RGBA BUFFER KE FFMPEG)
+// PIPELINE RENDER UTAMA KE ./output.mp4 (60 FPS, BUFFER RGBA MURNI)
 // ============================================================================
 async function main() {
-  const { timeline, totalDuration, masterAudioPath } = await prepareAudioAndTimeline();
-  const totalFrames = Math.ceil(totalDuration * FPS);
+  const totalDurationSec = await buildVoiceoverTimeline();
+  const sfxWavPath = path.join(TEMP_DIR, "sfx_master.wav");
+  const masterAudioPath = path.join(TEMP_DIR, "master_audio.m4a");
 
-  console.log(`=== [2/3] Merender ${totalFrames} Frame Video (1920x1080 @ ${FPS}fps) ===`);
+  generateProceduralSfxWav(totalDurationSec, sfxWavPath);
+  buildMasterAudioTrack(totalDurationSec, sfxWavPath, masterAudioPath);
 
+  console.log("=== [4/4] MERENDER ANIMASI 1080x1920 @ 60 FPS KE ./output.mp4 ===");
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
+  const totalFrames = Math.round(totalDurationSec * FPS);
 
-  // Jalankan proses FFmpeg penerima rawvideo RGBA + master audio WAV (TANPA atempo=1.18)
   const ffmpegArgs = [
     "-y",
-    "-f", "rawvideo",
-    "-vcodec", "rawvideo",
-    "-pix_fmt", "rgba",
-    "-s", `${WIDTH}x${HEIGHT}`,
-    "-r", String(FPS),
-    "-i", "-",
-    "-i", masterAudioPath,
-    "-c:v", "libx264",
-    "-preset", "veryfast",
-    "-crf", "20",
-    "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
-    "-b:a", "192k",
+    "-f",
+    "rawvideo",
+    "-pix_fmt",
+    "rgba",
+    "-s",
+    `${WIDTH}x${HEIGHT}`,
+    "-r",
+    String(FPS),
+    "-i",
+    "pipe:0",
+    "-i",
+    masterAudioPath,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-crf",
+    "20",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
     "-shortest",
     OUTPUT_FILE
   ];
@@ -1778,52 +2391,32 @@ async function main() {
     stdio: ["pipe", "ignore", "pipe"]
   });
 
-  let ffmpegErrLog = "";
-  ffmpegProc.stderr.on("data", (chunk) => {
-    ffmpegErrLog += chunk.toString();
+  ffmpegProc.stderr.on("data", () => {
+    // Konsumsi log stderr ffmpeg agar pipe tidak penuh
   });
 
-  let segIdx = 0;
-
+  let sceneIdx = 0;
   for (let frame = 0; frame < totalFrames; frame++) {
-    const currentTime = frame / FPS;
-
-    while (segIdx < timeline.length - 1 && currentTime >= timeline[segIdx].endTime) {
-      segIdx++;
+    const globalT = frame / FPS;
+    while (sceneIdx < SCENES.length - 1 && globalT >= SCENES[sceneIdx].endTime) {
+      sceneIdx++;
     }
 
-    const activeSeg = timeline[segIdx];
-    const localTime = Math.max(0, currentTime - activeSeg.startTime);
-    const segProgress = clamp(localTime / activeSeg.duration, 0, 1);
-    const isSpeaking = localTime <= activeSeg.voiceDuration;
-    const voiceProgress = clamp(localTime / Math.max(0.1, activeSeg.voiceDuration), 0, 1);
+    renderFrame(ctx, sceneIdx, globalT, totalDurationSec);
 
-    // 1. Gambar Studio & Papan Tulis
-    drawStudioAndWhiteboardShell(ctx);
-
-    // 2. Gambar Ilustrasi Geometri Proyeksi di Papan Tulis & dapatkan titik fokus tangan
-    const pointerTarget = renderWhiteboardContent(ctx, activeSeg.boardPhase, segProgress, currentTime);
-
-    // 3. Gambar Instruktur Animasi dengan Kinematika Lengan & Lip-Sync
-    drawAnimatedInstructor(ctx, currentTime, isSpeaking, pointerTarget);
-
-    // 4. Gambar Caption Singkat (7 kata per frasa, tanpa teks atas/bawah yang berlebihan)
-    drawMinimalCaption(ctx, activeSeg.narration, voiceProgress, isSpeaking);
-
-    // Ambil buffer RGBA murni dari @napi-rs/canvas atau fallback getImageData
     const rawBuffer =
       typeof canvas.data === "function"
         ? canvas.data()
-        : Buffer.from(ctx.getImageData(0, 0, WIDTH, HEIGHT).data.buffer);
+        : canvas.toBuffer("raw");
 
-    const canWrite = ffmpegProc.stdin.write(rawBuffer);
-    if (!canWrite) {
+    const canContinue = ffmpegProc.stdin.write(rawBuffer);
+    if (!canContinue) {
       await new Promise((resolve) => ffmpegProc.stdin.once("drain", resolve));
     }
 
     if (frame % (FPS * 15) === 0 || frame === totalFrames - 1) {
-      const pct = (((frame + 1) / totalFrames) * 100).toFixed(1);
-      console.log(`Progres Render: ${pct}% (${(frame / FPS).toFixed(0)}s / ${totalDuration.toFixed(0)}s)`);
+      const pct = ((frame / totalFrames) * 100).toFixed(1);
+      console.log(`  -> Progress Render: Frame ${frame}/${totalFrames} (${pct}%)`);
     }
   }
 
@@ -1832,22 +2425,15 @@ async function main() {
   await new Promise((resolve, reject) => {
     ffmpegProc.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`FFmpeg keluar dengan kode ${code}:\n${ffmpegErrLog.slice(-600)}`));
+      else reject(new Error(`FFmpeg keluar dengan kode ${code}`));
     });
+    ffmpegProc.on("error", reject);
   });
 
-  // Bersihkan file sementara
-  try {
-    fs.rmSync(TEMP_DIR, { recursive: true, force: true });
-  } catch (e) {
-    // Abaikan jika gagal hapus folder temp
-  }
-
-  console.log(`=== [3/3] Selesai! Video tersimpan di: ${OUTPUT_FILE} ===`);
+  console.log(`=== SELESAI! Video berhasil disimpan ke: ${OUTPUT_FILE} ===`);
 }
 
 main().catch((err) => {
-  console.error("Gagal merender video:", err);
+  console.error("FATAL RENDER ERROR:", err);
   process.exit(1);
 });
-```

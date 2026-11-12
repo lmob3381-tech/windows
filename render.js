@@ -1,2439 +1,2095 @@
-const VOICE_MODEL = "id_brian_narrator";
-
+```javascript
 /**
  * ============================================================================
- * RENDER.JS - CINEMATIC 9:16 (60 FPS, 5 MENIT) DOKUMENTER ANIMASI NUKLIR & CHERNOBYL
+ * JOULE THIEF 3D ANIMATION & EDUCATIONAL RENDER ENGINE (render.js)
  * ============================================================================
- * Fitur Utama:
- * 1. Resolusi 1080x1920 (9:16 Vertical Full HD), 60 FPS, Durasi Target 300 Detik (5 Menit).
- * 2. Animasi Karakter Manusia Lengkap (Rigging Kepala, Ekspresi Wajah, Lip-Sync Suara,
- *    Kedipan Mata, Bahu, Siku, Tangan, Kaki Berjalan, Jas Lab, Seragam Operator RBMK,
- *    dan Hazmat Likuidator).
- * 3. Visualisasi Benda & Fisika Lengkap (Inti Atom Uranium-235, Reaksi Berantai Fisi,
- *    Skema PLTN & Turbin Berputar, Ruang Kontrol Chernobyl Unit 4, Batang Kendali
- *    Berujung Grafit, Koefisien Rongga Positif, Ledakan Reaktor RBMK-1000, Helikopter
- *    Likuidator, Bianglala Pripyat, Hutan Merah, dan New Safe Confinement).
- * 4. Perhitungan Durasi Audio Presisi (ffprobe) + Anti-Tabrakan Suara (Zero Voice Overlap).
- * 5. Synthesizer Efek Suara (SFX) & Ambient Sinematik Prosedural (Detak Geiger Counter,
- *    Sirene Alarm AZ-5, Gemuruh Uap Tekanan Tinggi, Ledakan Reaktor, Helikopter,
- *    Turbin Listrik, dan Drone Atmosferik) yang digabung murni tanpa filter atempo=1.18.
+ * Resolusi: 1920x1080 (Full HD 60/30 FPS)
+ * Durasi Target: ~3 Menit 20 Detik (200 Detik)
+ * Karakter Utama: Udin (17 Tahun, Siswa SMA Indonesia, Kreator Edukasi)
+ * Suara: id_andrew_studio (Pria Hangat & Natural)
  * ============================================================================
  */
 
-const fs = require("fs");
-const path = require("path");
-const { spawn, execFileSync } = require("child_process");
+const fs = require('fs');
+const path = require('path');
+const { spawn, execSync } = require('child_process');
+const { createCanvas } = require('@napi-rs/canvas');
 
-let createCanvas;
-try {
-  createCanvas = require("@napi-rs/canvas").createCanvas;
-} catch (err) {
-  createCanvas = require("canvas").createCanvas;
-}
+const VOICE_MODEL = "id_andrew_studio";
 
-// ============================================================================
-// KONFIGURASI VIDEO & TIMELINE UTAMA
-// ============================================================================
-const WIDTH = 1080;
-const HEIGHT = 1920;
-const FPS = 60;
-const TARGET_TOTAL_DURATION = 300.0; // 5 Menit tepat (300 detik = 18.000 frame @ 60fps)
-const OUTPUT_FILE = path.resolve("./output.mp4");
-const TEMP_DIR = path.resolve("./temp_nuclear_studio");
+const WIDTH = 1920;
+const HEIGHT = 1080;
+const FPS = 30;
+const OUTPUT_VIDEO = path.resolve('./output.mp4');
+const TEMP_DIR = path.resolve('./temp_joule_thief_audio');
 
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
 // ============================================================================
-// DAFTAR 15 ADEGAN CERITA LENGKAP (5 BABAK NARASI MENDALAM)
+// 1. NASKAH LENGKAP & PEMBAGIAN ADEGAN (~3 MENIT)
 // ============================================================================
 const SCENES = [
   {
-    id: "scene_01",
-    act: "BABAK I: RAHASIA INTI ATOM",
-    title: "Energi Terdahsyat di Alam Semesta",
-    timeLabel: "LABORATORIUM FISIKA NUKLIR",
-    geigerCpm: 18,
-    powerMw: 0,
-    themeColor: "#00f2fe",
-    sfxType: "lab_hum",
-    cameraZoom: 1.04,
-    minDuration: 19.0,
-    narration:
-      "Pernahkah kamu membayangkan, bahwa di dalam sebutir logam seukuran ujung jari ini, tersimpan energi yang setara dengan seribu ton batu bara? Inilah energi nuklir. Sebuah kekuatan mahadahsyat yang bersembunyi di jantung setiap atom di alam semesta kita. Hari ini, saya akan mengajakmu menyelami kisah nyata di balik kekuatan atom, bagaimana ia menerangi jutaan rumah, hingga malam kelam ketika ia lepas kendali di Chernobyl."
+    id: 1,
+    name: "Adegan 1: Hook & Masalah Baterai Bekas",
+    targetDuration: 30,
+    narration: "Punya baterai bekas di rumah yang udah nggak kuat nyalain jam dinding? Jangan buru-buru dibuang! Liat nih, tegangan baterai ini cuma sisa nol koma delapan lima Volt. Buat nyalain satu lampu L E D yang butuh minimal tiga Volt aja, dia udah nyerah total. Tapi, dengan rangkaian legendaris bernama Joule Thief, alias si pencuri energi, kita bisa peras sisa tenaga baterai ini sampai tetes terakhir. Yuk, kita rakit!"
   },
   {
-    id: "scene_02",
-    act: "BABAK I: RAHASIA INTI ATOM",
-    title: "Anatomi Uranium-235 & Tumbukan Neutron",
-    timeLabel: "SKALA SUB-MIKROSKOPIS: 10⁻¹⁵ METER",
-    geigerCpm: 45,
-    powerMw: 10,
-    themeColor: "#38ef7d",
-    sfxType: "atom_pulse",
-    cameraZoom: 1.08,
-    minDuration: 20.0,
-    narration:
-      "Mari kita perbesar pandangan kita jutaan kali lipat ke dalam inti atom Uranium dua tiga lima. Inti ini sangat padat namun tidak stabil, terdiri dari sembilan puluh dua proton dan seratus empat puluh tiga neutron yang saling berdesakan. Ketika satu partikel neutron bebas ditembakkan dengan kecepatan tepat ke arahnya, inti Uranium akan menangkap neutron itu, berguncang hebat, lalu terbelah menjadi dua inti yang lebih kecil."
+    id: 2,
+    name: "Adegan 2: Pengenalan Bahan & Komponen 3D",
+    targetDuration: 28,
+    narration: "Bahannya simpel banget dan gampang dicari. Pertama, inti ferit bentuk donat alias toroid. Kedua, dua utas kawat tembaga, di sini gue bedain warna merah dan biru biar gampang liatnya. Ketiga, transistor N P N tipe dua N dua dua dua dua. Keempat, resistor satu kilo Ohm dengan gelang cokelat, hitam, merah, dan emas. Kelima, lampu L E D lima milimeter tiga Volt. Dan terakhir, baterai A A bekas tadi."
   },
   {
-    id: "scene_03",
-    act: "BABAK I: RAHASIA INTI ATOM",
-    title: "Reaksi Berantai Eksponensial",
-    timeLabel: "FISI NUKLIR & E = mc²",
-    geigerCpm: 120,
-    powerMw: 250,
-    themeColor: "#f7971e",
-    sfxType: "chain_reaction",
-    cameraZoom: 1.06,
-    minDuration: 20.0,
-    narration:
-      "Pembelahan yang disebut fisi nuklir ini melepaskan energi panas luar biasa sesuai persamaan legendaris Albert Einstein, E sama dengan m c kuadrat. Bukan hanya itu, setiap satu inti yang terbelah ikut melontarkan dua hingga tiga neutron baru. Neutron-neutron baru ini langsung menabrak inti Uranium lain di dekatnya, menciptakan reaksi berantai kilat yang melipatgandakan energi dalam hitungan nanodetik."
+    id: 3,
+    name: "Adegan 3: Proses Perakitan 3D & Penyolderan",
+    targetDuration: 58,
+    narration: "Cara rakitnya gampang. Lilitkan kawat merah dan biru barengan secara bifilar ke inti ferit sekitar sepuluh lilitan rapi. Nah, perhatiin bagian penting ini: ambil ujung awal kawat merah dan ujung akhir kawat biru, lalu pelintir jadi satu. Ini bakal jadi jalur positif baterai. Lanjut, sisa ujung kawat biru kita sambungin ke resistor satu kilo Ohm, terus masuk ke kaki tengah transistor alias Basis. Sisa ujung kawat merah masuk ke kaki kanan transistor alias Kolektor. Terakhir, pasang kaki panjang positif L E D ke Kolektor, dan kaki pendek negatif L E D barengan sama kaki kiri Emitor transistor ke jalur negatif baterai. Solder semua titik sambungannya sampai timah mengkilap biar kuat dan arus mengalir sempurna."
   },
   {
-    id: "scene_04",
-    act: "BABAK II: MESIN RAKSASA PEMBANGKIT LISTRIK",
-    title: "Mengendalikan Sang Naga di Dalam Reaktor",
-    timeLabel: "TERAS REAKTOR & BATANG KENDALI",
-    geigerCpm: 85,
-    powerMw: 1500,
-    themeColor: "#00d2ff",
-    sfxType: "reactor_core",
-    cameraZoom: 1.05,
-    minDuration: 20.0,
-    narration:
-      "Bagaimana manusia menjinakkan reaksi berantai ini agar tidak meledak? Di dalam pembangkit listrik tenaga nuklir, batang-batang bahan bakar Uranium disusun rapi di dalam bejana baja bertekanan tinggi. Di sela-selanya, terdapat batang kendali berbahan Boron atau Kadmium yang bertugas menyerap neutron berlebih. Saat batang kendali diturunkan, reaksi melambat. Saat diangkat sedikit, reaksi menghangat secara terukur."
+    id: 4,
+    name: "Adegan 4: Uji Coba Mode Gelap & Cara Kerja X-Ray",
+    targetDuration: 64,
+    narration: "Sekarang kita matiin lampu kamar, dan pasang baterainya. Boom! Nyala terang banget kan? Kok bisa tegangan nol koma delapan lima Volt nyalain L E D tiga Volt? Mari kita intip ke dalam rangkaiannya lewat mode X-Ray! Jadi gini, saat baterai dipasang, arus kecil ngalir lewat resistor ke Basis dan bikin gerbang transistor kebuka sedikit. Arus pun ngalir lewat kawat merah ke Kolektor dan nyiptain medan magnet biru yang membesar di donat ferit. Nah, medan magnet ini menginduksi kawat biru dengan arah berlawanan dan nutup gerbang Basis transistor secara mendadak! Karena arusnya putus tiba-tiba, medan magnet di toroid langsung runtuh seketika dan nembakin lonjakan tegangan tinggi melewati L E D hingga menyala terang. Proses buka tutup sakelar otomatis ini terjadi puluhan ribu kali dalam sedetik. Mata kita nggak bisa liat kedipannya, jadi L E D kelihatan nyala stabil terus-menerus!"
   },
   {
-    id: "scene_05",
-    act: "BABAK II: MESIN RAKSASA PEMBANGKIT LISTRIK",
-    title: "Dari Uap Panas Menjadi Cahaya Kota",
-    timeLabel: "SIKLUS TERMODINAMIKA PLTN",
-    geigerCpm: 30,
-    powerMw: 3200,
-    themeColor: "#4facfe",
-    sfxType: "turbine_spin",
-    cameraZoom: 1.04,
-    minDuration: 20.0,
-    narration:
-      "Panas ekstrem dari teras reaktor mendidihkan air murni hingga berubah menjadi uap bertekanan tinggi. Uap inilah yang memutar bilah-bilah turbin raksasa dengan kecepatan ribuan putaran per menit. Putaran turbin menggerakkan generator elektromagnetik yang mengalirkan listrik bersih bebas asap karbon ke jutaan rumah, rumah sakit, dan pabrik, sementara uap air didinginkan kembali melalui menara pendingin."
-  },
-  {
-    id: "scene_06",
-    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
-    title: "Malam 25-26 April 1986: Reaktor RBMK-1000",
-    timeLabel: "PRIPYAT, UKRAINA - 25 APRIL 1986, 23:00",
-    geigerCpm: 60,
-    powerMw: 1600,
-    themeColor: "#f857a6",
-    sfxType: "control_room",
-    cameraZoom: 1.06,
-    minDuration: 20.0,
-    narration:
-      "Namun sejarah mencatat satu malam ketika aturan fisika dilanggar oleh ambisi dan kecerobohan. Tanggal dua puluh lima April seribu sembilan ratus delapan puluh enam, di Pembangkit Listrik Tenaga Nuklir Chernobyl dekat kota Pripyat, Ukraina. Para operator reaktor nomor empat yang bertipe R B M K seribu sedang bersiap menjalankan uji coba keamanan turbin apabila aliran listrik utama mendadak mati."
-  },
-  {
-    id: "scene_07",
-    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
-    title: "Jebakan Racun Xenon & Daya Anjlok",
-    timeLabel: "26 APRIL 1986 - 00:28 DINI HARI",
-    geigerCpm: 140,
-    powerMw: 30,
-    themeColor: "#ff512f",
-    sfxType: "xenon_warning",
-    cameraZoom: 1.07,
-    minDuration: 20.0,
-    narration:
-      "Uji coba itu ditunda selama berjam-jam karena permintaan listrik kota, sehingga giliran kerja jatuh kepada kru malam yang belum terlatih untuk skenario tersebut. Saat daya reaktor diturunkan, terjadi kesalahan prosedur yang membuat daya anjlok drastis hingga tinggal tiga puluh megawatt. Pada titik serendah itu, gas racun Xenon seratus tiga puluh lima menumpuk di dalam teras dan mencekik reaksi nuklir."
-  },
-  {
-    id: "scene_08",
-    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
-    title: "Cacat Fatal: Koefisien Rongga Positif",
-    timeLabel: "26 APRIL 1986 - 01:22:30 DINI HARI",
-    geigerCpm: 420,
-    powerMw: 200,
-    themeColor: "#ff0844",
-    sfxType: "void_boiling",
-    cameraZoom: 1.09,
-    minDuration: 21.0,
-    narration:
-      "Demi memaksa daya naik kembali, wakil kepala insinyur memerintahkan pencabutan hampir seluruh batang kendali, menyisakan jauh di bawah batas aman. Di sinilah cacat desain reaktor R B M K bekerja bagai bom waktu, yaitu koefisien rongga positif. Ketika air pendingin mendidih dan membentuk gelembung uap, bukannya melambat, reaktivitas neutron di dalam blok moderator grafit justru melonjak semakin liar dan tak terkendali."
-  },
-  {
-    id: "scene_09",
-    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
-    title: "Tombol AZ-5 & Ujung Grafit Pembawa Petaka",
-    timeLabel: "26 APRIL 1986 - 01:23:40 DINI HARI",
-    geigerCpm: 2800,
-    powerMw: 33000,
-    themeColor: "#ff0000",
-    sfxType: "az5_alarm",
-    cameraZoom: 1.12,
-    minDuration: 21.0,
-    narration:
-      "Pukul satu lewat dua puluh tiga menit empat puluh detik, kepala shift Aleksandr Akimov menekan tombol darurat A Z lima untuk memasukkan semua batang kendali sekaligus. Namun mereka tidak tahu, ujung bawah setiap batang kendali R B M K terbuat dari grafit pemercepat reaksi! Saat batang mulai turun, ujung grafit itu mendesak air keluar dan memicu lonjakan daya seratus kali lipat hingga tiga puluh tiga ribu megawatt!"
-  },
-  {
-    id: "scene_10",
-    act: "BABAK III: KRONOLOGI TRAGEDI CHERNOBYL",
-    title: "Pukul 01:23:45 — Dua Ledakan Mengoyak Malam",
-    timeLabel: "26 APRIL 1986 - 01:23:45 DINI HARI",
-    geigerCpm: 99999,
-    powerMw: 33000,
-    themeColor: "#ff4e00",
-    sfxType: "explosion_blast",
-    cameraZoom: 1.15,
-    minDuration: 20.0,
-    narration:
-      "Saluran bahan bakar pecah lebur seketika. Tekanan uap raksasa meledakkan tutup pelindung biologis seberat dua ribu ton hingga terlempar ke udara! Tiga detik kemudian, ledakan kedua yang dipicu reaksi hidrogen dan grafit panas menghancurkan atap gedung reaktor. Serpihan bahan bakar radioaktif dan grafit membara berhamburan keluar, sementara cahaya biru pendaran ionisasi menembus lurus ke langit malam."
-  },
-  {
-    id: "scene_11",
-    act: "BABAK IV: DAMPAK & PERJUANGAN KEMANUSIAAN",
-    title: "Musuh Tak Kasatmata & Pemadam Kebakaran",
-    timeLabel: "26 APRIL 1986 - 02:00 DINI HARI",
-    geigerCpm: 45000,
-    powerMw: 0,
-    themeColor: "#ff2a54",
-    sfxType: "geiger_heavy",
-    cameraZoom: 1.07,
-    minDuration: 20.0,
-    narration:
-      "Regu pemadam kebakaran tiba hanya dalam hitungan menit tanpa mengetahui bahwa teras reaktor telah terbuka. Mereka mengira itu hanyalah kebakaran atap biasa. Padahal, setiap detik tubuh mereka dihujani sinar gamma berenergi tinggi yang memutus untaian D N A di dalam sel-sel hidup. Dua puluh delapan petugas dan operator gugur dalam beberapa minggu akibat sindrom radiasi akut yang sangat menyakitkan."
-  },
-  {
-    id: "scene_12",
-    act: "BABAK IV: DAMPAK & PERJUANGAN KEMANUSIAAN",
-    title: "Pengorbanan 600.000 Likuidator & Helikopter",
-    timeLabel: "MEI 1986 - OPERASI PEMADAMAN TERAS",
-    geigerCpm: 18500,
-    powerMw: 0,
-    themeColor: "#f7b733",
-    sfxType: "helicopter_drop",
-    cameraZoom: 1.06,
-    minDuration: 20.0,
-    narration:
-      "Kebakaran grafit di dalam kawah reaktor terus menyemburkan awan radioaktif selama sepuluh hari. Pilot-pilot helikopter terbang nekat menembus kepulan asap mematikan untuk menjatuhkan lima ribu ton pasir, timbal, dan boron. Tiga sukarelawan penyelam bahkan turun ke lorong banjir yang gelap gulita di bawah reaktor untuk membuka katup air agar lelehan korium tidak memicu ledakan uap kedua yang lebih dahsyat."
-  },
-  {
-    id: "scene_13",
-    act: "BABAK IV: DAMPAK & PERJUANGAN KEMANUSIAAN",
-    title: "Kota Hantu Pripyat & Hutan Merah",
-    timeLabel: "27 APRIL 1986 - EVAKUASI 49.000 WARGA",
-    geigerCpm: 6200,
-    powerMw: 0,
-    themeColor: "#e65c00",
-    sfxType: "evac_siren",
-    cameraZoom: 1.05,
-    minDuration: 20.0,
-    narration:
-      "Tiga puluh enam jam setelah ledakan, lebih dari seribu bus dikerahkan untuk mengevakuasi empat puluh sembilan ribu penduduk Pripyat. Mereka hanya diberi waktu dua jam untuk mengemas barang dan tidak pernah diizinkan pulang selamanya. Pohon-pohon pinus di sekitar reaktor mati mengering dan berubah warna menjadi merah karat akibat radiasi ekstrem, sementara awan Iodium dan Cesium terbawa angin melintasi benua Eropa."
-  },
-  {
-    id: "scene_14",
-    act: "BABAK V: WARISAN SAINS & MASA DEPAN",
-    title: "Kubah Pelindung Baja & Revolusi Keamanan",
-    timeLabel: "NEW SAFE CONFINEMENT - ABAD KE-21",
-    geigerCpm: 110,
-    powerMw: 0,
-    themeColor: "#00b09b",
-    sfxType: "modern_shield",
-    cameraZoom: 1.05,
-    minDuration: 20.0,
-    narration:
-      "Untuk mengurung sisa radiasi selama seratus tahun ke depan, dunia bersatu membangun struktur baja lengkung raksasa bernama New Safe Confinement yang digeser menutupi sarkofagus lama. Tragedi Chernobyl memicu revolusi besar dalam rekayasa nuklir dunia. Reaktor modern generasi terbaru kini wajib memiliki koefisien negatif alami dan sistem pendingin pasif berbasis gravitasi yang otomatis berhenti sendiri tanpa bantuan listrik."
-  },
-  {
-    id: "scene_15",
-    act: "BABAK V: WARISAN SAINS & MASA DEPAN",
-    title: "Pelajaran Abadi dari Jantung Atom",
-    timeLabel: "EPILOG: SAINS, KEJUJURAN & KEMANUSIAAN",
-    geigerCpm: 15,
-    powerMw: 4000,
-    themeColor: "#00f2fe",
-    sfxType: "epilogue_pad",
-    cameraZoom: 1.04,
-    minDuration: 19.0,
-    narration:
-      "Pada akhirnya, kisah energi nuklir dan Chernobyl mengajarkan kita satu kebenaran abadi. Sains memberikan manusia kunci menuju energi yang nyaris tak terbatas untuk menyelamatkan bumi dari krisis iklim. Namun kekuatan sebesar itu menuntut kerendahan hati, keselamatan tanpa kompromi, dan kejujuran mutlak terhadap hukum alam. Terima kasih telah menyimak perjalanan sains ini sampai akhir."
+    id: 5,
+    name: "Adegan 5: Penutup & Kesimpulan Eksperimen",
+    targetDuration: 22,
+    narration: "Keren banget kan? Dari barang-barang bekas yang kelihatan udah nggak berguna, ternyata masih bisa dimanfaatin maksimal pakai prinsip fisika induksi magnetik dan elektronika dasar. Selamat mencoba di rumah, dan jangan lupa selalu hati-hati pas pakai solder panas. Gue Udin, sampai ketemu di eksperimen seru berikutnya!"
   }
 ];
 
 // ============================================================================
-// UTILITAS: PENGUKURAN DURASI AUDIO PRESISI & FALLBACK TTS
+// 2. UTILITAS MATEMATIKA, INTERPOLASI & PROYEKSI 3D PBR/STYLIZED
 // ============================================================================
-function getAudioDurationSec(filePath) {
-  try {
-    const out = execFileSync("ffprobe", [
-      "-v",
-      "error",
-      "-show_entries",
-      "format=duration",
-      "-of",
-      "default=noprint_wrappers=1:nokey=1",
-      filePath
-    ]);
-    const val = parseFloat(out.toString().trim());
-    if (!Number.isNaN(val) && val > 0.1) {
-      return val;
-    }
-  } catch (e) {
-    // Fallback estimasi kata jika ffprobe gagal pada file korup
-  }
-  return 0;
-}
+const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+const lerp = (a, b, t) => a + (b - a) * clamp(t, 0, 1);
+const smoothstep = (edge0, edge1, x) => {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+const easeOutBack = (x) => {
+  const t = clamp(x, 0, 1);
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+};
+const easeInOutCubic = (x) => {
+  const t = clamp(x, 0, 1);
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+};
 
-function generateSilentOrToneMp3Fallback(filePath, durationSec) {
-  execFileSync("ffmpeg", [
-    "-y",
-    "-f",
-    "lavfi",
-    "-i",
-    `anullsrc=r=44100:cl=stereo:d=${durationSec.toFixed(3)}`,
-    "-c:a",
-    "libmp3lame",
-    "-q:a",
-    "4",
-    filePath
-  ]);
-}
-
-async function buildVoiceoverTimeline() {
-  console.log("=== [1/4] MEMBUAT VOICEOVER STUDIO & MENGHITUNG TIMELINE ANTI-TABRAKAN ===");
-  const prePad = 0.65;
-  const postPad = 1.15;
-
-  for (let i = 0; i < SCENES.length; i++) {
-    const sc = SCENES[i];
-    const mp3Path = path.join(TEMP_DIR, `${sc.id}_voice.mp3`);
-    sc.voicePath = mp3Path;
-
-    const wordCount = sc.narration.trim().split(/\s+/).length;
-    const estimatedVoiceSec = Math.max(12.0, wordCount / 2.35);
-
-    try {
-      if (typeof global.generateStudioVoice === "function") {
-        const res = global.generateStudioVoice(sc.narration, mp3Path, VOICE_MODEL);
-        if (res && typeof res.then === "function") {
-          await res;
-        }
-      } else {
-        generateSilentOrToneMp3Fallback(mp3Path, estimatedVoiceSec);
-      }
-    } catch (err) {
-      console.warn(`[WARN] Fallback voice untuk ${sc.id}:`, err.message);
-      generateSilentOrToneMp3Fallback(mp3Path, estimatedVoiceSec);
-    }
-
-    if (!fs.existsSync(mp3Path) || fs.statSync(mp3Path).size < 256) {
-      generateSilentOrToneMp3Fallback(mp3Path, estimatedVoiceSec);
-    }
-
-    let measuredSec = getAudioDurationSec(mp3Path);
-    if (measuredSec <= 0.2) {
-      measuredSec = estimatedVoiceSec;
-    }
-
-    sc.voiceDuration = measuredSec;
-    sc.prePad = prePad;
-    sc.postPad = postPad;
-    sc.rawDuration = Math.max(sc.minDuration, sc.voiceDuration + prePad + postPad);
+class Camera3D {
+  constructor() {
+    this.pos = { x: 0, y: 120, z: -480 };
+    this.target = { x: 0, y: 80, z: 0 };
+    this.fov = 720;
+    this.roll = 0;
   }
 
-  // Hitung total durasi awal dan sesuaikan agar tepat >= 300 detik (5 menit) tanpa menabrakkan suara
-  const sumRaw = SCENES.reduce((acc, s) => acc + s.rawDuration, 0);
-  const extraNeeded = Math.max(0, TARGET_TOTAL_DURATION - sumRaw);
-  const extraPerScene = extraNeeded / SCENES.length;
-
-  let cursor = 0.0;
-  for (let i = 0; i < SCENES.length; i++) {
-    const sc = SCENES[i];
-    sc.duration = sc.rawDuration + extraPerScene;
-    sc.startTime = cursor;
-    sc.endTime = cursor + sc.duration;
-    // Voiceover selalu mulai setelah prePad dari startTime adegan, dan selesai sebelum endTime - postPad
-    sc.voiceStartTime = sc.startTime + sc.prePad;
-    sc.voiceEndTime = sc.voiceStartTime + sc.voiceDuration;
-    cursor = sc.endTime;
-
-    // Pecah kata untuk animasi subtitle sinkron & lip-sync karakter
-    const words = sc.narration.trim().split(/\s+/);
-    const totalChars = words.reduce((a, w) => a + w.length + 1, 0);
-    let wCursor = sc.voiceStartTime;
-    sc.wordTimings = words.map((w) => {
-      const wDur = ( (w.length + 1) / totalChars ) * sc.voiceDuration;
-      const item = {
-        word: w,
-        start: wCursor,
-        end: wCursor + wDur
-      };
-      wCursor += wDur;
-      return item;
-    });
-
-    console.log(
-      `  -> ${sc.id} | Scene: [${sc.startTime.toFixed(2)}s - ${sc.endTime.toFixed(2)}s] | ` +
-      `Voice: [${sc.voiceStartTime.toFixed(2)}s - ${sc.voiceEndTime.toFixed(2)}s] (${sc.voiceDuration.toFixed(2)}s)`
-    );
+  setPose(px, py, pz, tx, ty, tz, fov = 720, roll = 0) {
+    this.pos.x = px; this.pos.y = py; this.pos.z = pz;
+    this.target.x = tx; this.target.y = ty; this.target.z = tz;
+    this.fov = fov;
+    this.roll = roll;
   }
 
-  const totalFinalDuration = cursor;
-  console.log(`=== TOTAL DURASI TERKUNCI: ${totalFinalDuration.toFixed(2)} DETIK (${Math.round(totalFinalDuration * FPS)} FRAMES @ ${FPS} FPS) ===`);
-  return totalFinalDuration;
+  project(x, y, z) {
+    const dx = this.target.x - this.pos.x;
+    const dy = this.target.y - this.pos.y;
+    const dz = this.target.z - this.pos.z;
+    const lenF = Math.hypot(dx, dy, dz) || 1;
+    const fx = dx / lenF, fy = dy / lenF, fz = dz / lenF;
+
+    let ux = 0, uy = 1, uz = 0;
+    if (Math.abs(fy) > 0.99) { ux = 0; uy = 0; uz = 1; }
+
+    let rx = uy * fz - uz * fy;
+    let ry = uz * fx - ux * fz;
+    let rz = ux * fy - uy * fx;
+    const lenR = Math.hypot(rx, ry, rz) || 1;
+    rx /= lenR; ry /= lenR; rz /= lenR;
+
+    const tux = fy * rz - fz * ry;
+    const tuy = fz * rx - fx * rz;
+    const tuz = fx * ry - fy * rx;
+
+    const vx = x - this.pos.x;
+    const vy = y - this.pos.y;
+    const vz = z - this.pos.z;
+
+    let cx = vx * rx + vy * ry + vz * rz;
+    let cy = vx * tux + vy * tuy + vz * tuz;
+    const cz = vx * fx + vy * fy + vz * fz;
+
+    if (this.roll !== 0) {
+      const c = Math.cos(this.roll);
+      const s = Math.sin(this.roll);
+      const ncx = cx * c - cy * s;
+      const ncy = cx * s + cy * c;
+      cx = ncx; cy = ncy;
+    }
+
+    const safeZ = Math.max(15, cz);
+    const scale = this.fov / safeZ;
+    return {
+      x: WIDTH * 0.5 + cx * scale,
+      y: HEIGHT * 0.5 - cy * scale,
+      z: cz,
+      scale: scale,
+      visible: cz > 15
+    };
+  }
 }
 
 // ============================================================================
-// SYNTHESIZER EFEK SUARA (SFX) & AMBIENT MUSIK PROSEDURAL (WAV 44.1kHz STEREO)
+// 3. HELPER GAMBAR 2D/3D STYLIZED (SILINDER, KAPSUL, TEKS MELAYANG)
 // ============================================================================
-function generateProceduralSfxWav(totalDurationSec, outWavPath) {
-  console.log("=== [2/4] MENSINTESIS EFEK SUARA (SFX) SINEMATIK SESUAI JALAN CERITA ===");
-  const sampleRate = 22050; // 22.05kHz Stereo untuk efisiensi memori & kejernihan SFX
-  const totalSamples = Math.ceil(totalDurationSec * sampleRate);
-  const numChannels = 2;
-  const bytesPerSample = 2;
-  const dataSize = totalSamples * numChannels * bytesPerSample;
-  const buffer = Buffer.alloc(44 + dataSize);
+function drawCapsule3D(ctx, cam, p1, p2, radius3D, colorMain, colorHighlight, colorShadow) {
+  const a = cam.project(p1.x, p1.y, p1.z);
+  const b = cam.project(p2.x, p2.y, p2.z);
+  if (!a.visible && !b.visible) return;
 
-  // Header WAV standar
-  buffer.write("RIFF", 0);
-  buffer.writeUInt32LE(36 + dataSize, 4);
-  buffer.write("WAVE", 8);
-  buffer.write("fmt ", 12);
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20); // PCM
-  buffer.writeUInt16LE(numChannels, 22);
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * numChannels * bytesPerSample, 28);
-  buffer.writeUInt16LE(numChannels * bytesPerSample, 32);
-  buffer.writeUInt16LE(16, 34);
-  buffer.write("data", 36);
-  buffer.writeUInt32LE(dataSize, 40);
+  const rA = Math.max(1.5, radius3D * a.scale);
+  const rB = Math.max(1.5, radius3D * b.scale);
+  const rAvg = (rA + rB) * 0.5;
 
-  // PRNG deterministik untuk noise ledakan & klik Geiger Counter
-  let seed = 19860426;
-  function rand() {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return (seed / 4294967296) * 2 - 1;
-  }
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
 
-  let lowPassState = 0;
-  let geigerHoldSamples = 0;
-  let geigerFreq = 2400;
-
-  let sceneIdx = 0;
-  for (let i = 0; i < totalSamples; i++) {
-    const t = i / sampleRate;
-    while (sceneIdx < SCENES.length - 1 && t >= SCENES[sceneIdx].endTime) {
-      sceneIdx++;
-    }
-    const sc = SCENES[sceneIdx];
-    const localT = t - sc.startTime;
-    const sceneProgress = Math.max(0, Math.min(1, localT / sc.duration));
-
-    // Ducking volume SFX saat karakter sedang berbicara agar narasi jernih 100%
-    const isSpeaking = t >= sc.voiceStartTime && t <= sc.voiceEndTime;
-    const duckGain = isSpeaking ? 0.24 : 0.58;
-
-    let left = 0;
-    let right = 0;
-
-    // 1. Sub-bass & Drone Atmosferik sesuai Babak
-    const baseFreq = sceneIdx >= 5 && sceneIdx <= 12 ? 55.0 : 65.41; // A1 (tegang) vs C2 (ilmiah/harapan)
-    const fifthFreq = baseFreq * 1.498;
-    const minorThirdFreq = baseFreq * (sceneIdx >= 5 && sceneIdx <= 12 ? 1.189 : 1.26);
-    const padSlowMod = 0.5 + 0.5 * Math.sin(t * 0.45);
-    const drone =
-      0.08 * Math.sin(2 * Math.PI * baseFreq * t) +
-      0.04 * Math.sin(2 * Math.PI * fifthFreq * t + Math.sin(t * 0.8)) +
-      0.03 * padSlowMod * Math.sin(2 * Math.PI * minorThirdFreq * t);
-    left += drone;
-    right += drone * 0.95;
-
-    // 2. Detak Jantung Sinematik saat ketegangan Chernobyl (Scene 6 - 11)
-    if (sceneIdx >= 5 && sceneIdx <= 10) {
-      const beatPeriod = sceneIdx >= 8 ? 0.62 : 0.88;
-      const beatPhase = t % beatPeriod;
-      if (beatPhase < 0.12) {
-        const env = Math.sin((beatPhase / 0.12) * Math.PI);
-        const thump = Math.sin(2 * Math.PI * 46 * beatPhase) * env * 0.16;
-        left += thump;
-        right += thump;
-      } else if (beatPhase >= 0.16 && beatPhase < 0.28) {
-        const env2 = Math.sin(((beatPhase - 0.16) / 0.12) * Math.PI);
-        const thump2 = Math.sin(2 * Math.PI * 38 * (beatPhase - 0.16)) * env2 * 0.11;
-        left += thump2;
-        right += thump2;
-      }
-    }
-
-    // 3. Efek Spesifik per Adegan
-    if (sc.sfxType === "atom_pulse" || sc.sfxType === "chain_reaction") {
-      // Dengung partikel kuantum & zap tumbukan neutron
-      const shimmer = 0.04 * Math.sin(2 * Math.PI * (440 + 180 * Math.sin(t * 3.5)) * t);
-      const pulseGate = Math.pow(Math.max(0, Math.sin(t * (sc.sfxType === "chain_reaction" ? 9.0 : 3.5))), 8);
-      const zap = pulseGate * 0.12 * Math.sin(2 * Math.PI * (880 - 300 * (t % 0.3)) * t);
-      left += shimmer + zap;
-      right += shimmer * 0.8 + zap * 1.1;
-    } else if (sc.sfxType === "reactor_core" || sc.sfxType === "turbine_spin") {
-      // Deru turbin uap & mekanisme batang kendali
-      const rpmFreq = sc.sfxType === "turbine_spin" ? 100 + 25 * Math.sin(t * 0.5) : 72;
-      const hum =
-        0.06 * Math.sin(2 * Math.PI * rpmFreq * t) +
-        0.03 * Math.sin(2 * Math.PI * rpmFreq * 2 * t);
-      const steamNoise = rand() * 0.025;
-      lowPassState = 0.88 * lowPassState + 0.12 * steamNoise;
-      left += hum + lowPassState;
-      right += hum + lowPassState;
-    } else if (sc.sfxType === "void_boiling") {
-      // Gelembung uap bertekanan tinggi mendidih di pipa RBMK
-      const rumble = rand() * (0.06 + 0.08 * sceneProgress);
-      lowPassState = 0.92 * lowPassState + 0.08 * rumble;
-      const pipePing = Math.pow(Math.max(0, Math.sin(t * 6.5)), 14) * 0.09 * Math.sin(2 * Math.PI * 1120 * t);
-      left += lowPassState + pipePing;
-      right += lowPassState + pipePing * 0.9;
-    } else if (sc.sfxType === "az5_alarm") {
-      // Sirene Darurat Ruang Kontrol AZ-5 (Dual-tone Soviet Klaxon)
-      const sirenCycle = t % 1.1;
-      const sirenFreq = sirenCycle < 0.55 ? 680 + 180 * (sirenCycle / 0.55) : 860 - 180 * ((sirenCycle - 0.55) / 0.55);
-      const sirenWave =
-        0.13 * Math.sin(2 * Math.PI * sirenFreq * t) +
-        0.06 * Math.sign(Math.sin(2 * Math.PI * sirenFreq * t));
-      const steamBuild = rand() * 0.12 * sceneProgress;
-      lowPassState = 0.9 * lowPassState + 0.1 * steamBuild;
-      left += sirenWave * 0.85 + lowPassState;
-      right += sirenWave + lowPassState;
-    } else if (sc.sfxType === "explosion_blast") {
-      // Dua Ledakan Dahsyat Chernobyl (Detik ke-1.2 dan ke-4.0 dalam scene_10)
-      const blast1T = localT - 1.2;
-      const blast2T = localT - 4.0;
-      let blastAmp = 0;
-      if (blast1T >= 0 && blast1T < 3.5) {
-        blastAmp += 0.55 * Math.exp(-blast1T * 1.35);
-      }
-      if (blast2T >= 0 && blast2T < 6.5) {
-        blastAmp += 0.75 * Math.exp(-blast2T * 0.75);
-      }
-      const rawNoise = rand();
-      lowPassState = 0.93 * lowPassState + 0.07 * rawNoise;
-      const subBoom =
-        blastAmp *
-        (lowPassState * 2.4 + 0.35 * Math.sin(2 * Math.PI * 34 * localT) + 0.18 * rawNoise);
-      left += subBoom;
-      right += subBoom * 0.96;
-    } else if (sc.sfxType === "helicopter_drop") {
-      // Baling-baling Helikopter Mi-8 Likuidator
-      const bladeGate = 0.5 + 0.5 * Math.sin(2 * Math.PI * 11.5 * t);
-      const rotorNoise = rand() * 0.14 * Math.pow(bladeGate, 3);
-      lowPassState = 0.84 * lowPassState + 0.16 * rotorNoise;
-      left += lowPassState * 1.2;
-      right += lowPassState * 0.9;
-    } else if (sc.sfxType === "evac_siren") {
-      // Sirene Evakuasi Kota Pripyat dari kejauhan
-      const wailFreq = 480 + 160 * Math.sin(2 * Math.PI * 0.28 * t);
-      const wail = 0.07 * Math.sin(2 * Math.PI * wailFreq * t);
-      left += wail;
-      right += wail * 0.85;
-    }
-
-    // 4. Detektor Radiasi Geiger-Müller Counter (Aktif sesuai intensitas geigerCpm)
-    const cpm = sc.geigerCpm || 20;
-    const clicksPerSec = Math.min(180, cpm / 25);
-    const clickProb = clicksPerSec / sampleRate;
-    if (geigerHoldSamples <= 0 && (seed & 0xffff) / 65536 < clickProb) {
-      geigerHoldSamples = Math.floor(sampleRate * 0.0018);
-      geigerFreq = 2100 + ((seed >>> 8) % 1400);
-    }
-    if (geigerHoldSamples > 0) {
-      const clickWave = 0.22 * Math.sin(2 * Math.PI * geigerFreq * t) * (rand() * 0.5 + 0.5);
-      left += clickWave;
-      right += clickWave;
-      geigerHoldSamples--;
-    }
-
-    // Transisi lembut di awal & akhir adegan (Whoosh pendek)
-    if (localT < 0.35) {
-      const wEnv = Math.sin((localT / 0.35) * Math.PI);
-      const whoosh = rand() * 0.04 * wEnv;
-      left += whoosh;
-      right += whoosh;
-    }
-
-    // Terapkan ducking gain & soft clipping
-    const outL = Math.max(-0.95, Math.min(0.95, left * duckGain));
-    const outR = Math.max(-0.95, Math.min(0.95, right * duckGain));
-
-    const offset = 44 + i * 4;
-    buffer.writeInt16LE(Math.floor(outL * 32767), offset);
-    buffer.writeInt16LE(Math.floor(outR * 32767), offset + 2);
-  }
-
-  fs.writeFileSync(outWavPath, buffer);
-}
-
-// ============================================================================
-// PENGGABUNGAN AUDIO MASTER (VOICEOVER + SFX TANPA TABRAKAN, TANPA ATEMPO=1.18)
-// ============================================================================
-function buildMasterAudioTrack(totalDurationSec, sfxWavPath, masterAudioPath) {
-  console.log("=== [3/4] MENGGABUNGKAN TRACK VOICEOVER & SFX DENGAN FFMPEG ===");
-  const inputs = ["-y", "-i", sfxWavPath];
-  const filterParts = [];
-  const mixLabels = ["[0:a]"];
-
-  for (let i = 0; i < SCENES.length; i++) {
-    const sc = SCENES[i];
-    inputs.push("-i", sc.voicePath);
-    const delayMs = Math.round(sc.voiceStartTime * 1000);
-    const inIdx = i + 1;
-    // Gunakan adelay presisi milidetik & volume boost jernih (tanpa atempo=1.18)
-    filterParts.push(
-      `[${inIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.35,adelay=${delayMs}|${delayMs}[v${i}]`
-    );
-    mixLabels.push(`[v${i}]`);
-  }
-
-  const totalInputsCount = SCENES.length + 1;
-  filterParts.push(
-    `${mixLabels.join("")}amix=inputs=${totalInputsCount}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]`
+  ctx.save();
+  const grad = ctx.createLinearGradient(
+    (a.x + b.x) * 0.5 - nx * rAvg,
+    (a.y + b.y) * 0.5 - ny * rAvg,
+    (a.x + b.x) * 0.5 + nx * rAvg,
+    (a.y + b.y) * 0.5 + ny * rAvg
   );
+  grad.addColorStop(0, colorHighlight || colorMain);
+  grad.addColorStop(0.45, colorMain);
+  grad.addColorStop(1, colorShadow || colorMain);
 
-  const filterComplex = filterParts.join(";");
-  execFileSync("ffmpeg", [
-    ...inputs,
-    "-filter_complex",
-    filterComplex,
-    "-map",
-    "[aout]",
-    "-t",
-    totalDurationSec.toFixed(3),
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    masterAudioPath
-  ]);
-}
-
-// ============================================================================
-// ENGINE GRAFIS & ANIMASI MANUSIA, FISIKA NUKLIR, DAN CHERNOBYL (60 FPS)
-// ============================================================================
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
-
-function lerp(a, b, t) {
-  return a + (b - a) * clamp(t, 0, 1);
-}
-
-function easeInOutCubic(x) {
-  const c = clamp(x, 0, 1);
-  return c < 0.5 ? 4 * c * c * c : 1 - Math.pow(-2 * c + 2, 3) / 2;
-}
-
-function drawRoundedRect(ctx, x, y, w, h, r) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + w - radius, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-  ctx.lineTo(x + w, y + h - radius);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-  ctx.lineTo(x + radius, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
-}
-
-/**
- * Menggambar Karakter Manusia Artikulasi Penuh (Kepala, Ekspresi, Lip-Sync,
- * Kacamata/Topi Operator/Masker Hazmat, Torso, Tangan Bersendi, Kaki Berjalan, & Properti)
- */
-function drawArticulatedHuman(ctx, opts) {
-  const {
-    x,
-    y,
-    scale = 1.0,
-    role = "scientist", // "scientist" | "operator" | "firefighter" | "liquidator"
-    emotion = "normal", // "normal" | "excited" | "shocked" | "panicked" | "somber"
-    isSpeaking = false,
-    speechPhase = 0,
-    time = 0,
-    walkSpeed = 0,
-    pointAngle = -0.5,
-    prop = "none", // "atom_orb" | "pointer" | "clipboard" | "geiger" | "az5_hand"
-    facing = 1
-  } = opts;
-
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale * facing, scale);
-
-  // Gerakan bernapas & berjalan
-  const breath = Math.sin(time * 2.6) * 3.5;
-  const walkCycle = walkSpeed > 0 ? Math.sin(time * 6.5) * walkSpeed : 0;
-  const bodyBob = Math.abs(walkCycle) * 6;
-
-  ctx.translate(0, -bodyBob + breath);
-
-  // Warna pakaian berdasarkan peran cerita
-  let coatColor = "#f1f5f9";
-  let shirtColor = "#1e293b";
-  let tieColor = "#0ea5e9";
-  let pantsColor = "#0f172a";
-  let skinColor = "#f4c29f";
-
-  if (role === "operator") {
-    coatColor = "#e2e8f0";
-    shirtColor = "#334155";
-    tieColor = "#dc2626";
-    pantsColor = "#1e293b";
-  } else if (role === "firefighter") {
-    coatColor = "#9a3412";
-    shirtColor = "#431407";
-    tieColor = "#facc15";
-    pantsColor = "#7c2d12";
-  } else if (role === "liquidator") {
-    coatColor = "#3f6212";
-    shirtColor = "#1a2e05";
-    tieColor = "#eab308";
-    pantsColor = "#365314";
-  }
-
-  // Bayangan lantai di bawah kaki
-  ctx.save();
-  ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
-  ctx.beginPath();
-  ctx.ellipse(0, 210 + bodyBob - breath, 68, 16, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  // ---- KAKI BELAKANG & DEPAN (Berjalan / Berdiri) ----
-  const drawLeg = (hipX, phaseOffset, isFront) => {
-    const swing = Math.sin(time * 6.5 + phaseOffset) * 0.35 * walkSpeed;
-    const kneeBend = Math.max(0, Math.cos(time * 6.5 + phaseOffset)) * 0.3 * walkSpeed;
-
-    ctx.save();
-    ctx.translate(hipX, 75);
-    ctx.rotate(swing);
-
-    // Paha
-    ctx.strokeStyle = isFront ? pantsColor : "#090d16";
-    ctx.lineWidth = 24;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, 65);
-    ctx.stroke();
-
-    // Betis & Sepatu
-    ctx.translate(0, 65);
-    ctx.rotate(kneeBend);
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, 62);
-    ctx.stroke();
-
-    // Sepatu
-    ctx.fillStyle = "#111827";
-    drawRoundedRect(ctx, -12, 55, 38, 18, 8);
-    ctx.fill();
-    ctx.restore();
-  };
-
-  drawLeg(-18, Math.PI, false);
-  drawLeg(18, 0, true);
-
-  // ---- LENGAN BELAKANG ----
-  ctx.save();
-  ctx.translate(-36, -42);
-  const backArmAngle = 0.25 + Math.sin(time * 2.2) * 0.08 - walkCycle * 0.3;
-  ctx.rotate(backArmAngle);
-  ctx.strokeStyle = coatColor;
-  ctx.lineWidth = 20;
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = rAvg * 2;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(-10, 58);
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
   ctx.stroke();
+  ctx.restore();
+}
 
-  ctx.translate(-10, 58);
-  ctx.rotate(-0.35 + Math.cos(time * 2.5) * 0.1);
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(12, 52);
-  ctx.stroke();
+function drawSphere3D(ctx, cam, center, radius3D, colorCore, colorEdge, glowColor = null, glowAlpha = 0) {
+  const p = cam.project(center.x, center.y, center.z);
+  if (!p.visible) return p;
+  const r = Math.max(1.5, radius3D * p.scale);
 
-  // Telapak tangan belakang
-  ctx.fillStyle = role === "liquidator" ? "#1f2937" : skinColor;
-  ctx.beginPath();
-  ctx.arc(12, 56, 10, 0, Math.PI * 2);
-  ctx.fill();
-
-  if (prop === "clipboard") {
-    ctx.fillStyle = "#92400e";
-    drawRoundedRect(ctx, -6, 42, 36, 48, 4);
+  ctx.save();
+  if (glowColor && glowAlpha > 0.01) {
+    const gRad = r * 3.8;
+    const glow = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, gRad);
+    glow.addColorStop(0, glowColor);
+    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.globalAlpha = clamp(glowAlpha, 0, 1);
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, gRad, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#f8fafc";
-    drawRoundedRect(ctx, -2, 47, 28, 38, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  const grad = ctx.createRadialGradient(p.x - r * 0.32, p.y - r * 0.32, r * 0.1, p.x, p.y, r);
+  grad.addColorStop(0, colorCore);
+  grad.addColorStop(1, colorEdge);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  return p;
+}
+
+function drawPolygon3D(ctx, cam, pts3D, fillStyle, strokeStyle = null, lineWidth = 1.5) {
+  const proj = pts3D.map(pt => cam.project(pt.x, pt.y, pt.z));
+  if (proj.every(p => !p.visible)) return;
+
+  ctx.save();
+  ctx.beginPath();
+  proj.forEach((p, idx) => {
+    if (idx === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  });
+  ctx.closePath();
+  if (fillStyle) {
+    ctx.fillStyle = fillStyle;
     ctx.fill();
   }
+  if (strokeStyle) {
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+  }
   ctx.restore();
+}
 
-  // ---- TORSO / BADAN & JAS LAB / SERAGAM ----
+function drawFloatingLabel3D(ctx, cam, pos3D, text, subtext = "", accentColor = "#38bdf8", alpha = 1, offset2D = { x: 0, y: -42 }) {
+  if (alpha <= 0.01) return;
+  const p = cam.project(pos3D.x, pos3D.y, pos3D.z);
+  if (!p.visible) return;
+
   ctx.save();
-  // Kemeja dalam
-  ctx.fillStyle = shirtColor;
-  drawRoundedRect(ctx, -42, -58, 84, 138, 22);
+  ctx.globalAlpha = clamp(alpha, 0, 1);
+
+  const bx = p.x + offset2D.x;
+  const by = p.y + offset2D.y;
+
+  // Garis penunjuk (callout line)
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(bx, by + 12);
+  ctx.stroke();
+
+  ctx.fillStyle = accentColor;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
   ctx.fill();
 
-  // Dasi Ilmuwan / Operator
-  if (role === "scientist" || role === "operator") {
-    ctx.fillStyle = tieColor;
+  ctx.font = "bold 18px sans-serif";
+  const w1 = ctx.measureText(text).width;
+  ctx.font = "14px sans-serif";
+  const w2 = subtext ? ctx.measureText(subtext).width : 0;
+  const boxW = Math.max(w1, w2) + 28;
+  const boxH = subtext ? 52 : 34;
+
+  const rx = bx - boxW * 0.5;
+  const ry = by - boxH;
+
+  ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(rx, ry, boxW, boxH, 8);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "bold 17px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, bx, ry + (subtext ? 18 : 17));
+
+  if (subtext) {
+    ctx.fillStyle = accentColor;
+    ctx.font = "600 13px sans-serif";
+    ctx.fillText(subtext, bx, ry + 38);
+  }
+  ctx.restore();
+}
+
+// ============================================================================
+// 4. LINGKUNGAN 3D: KAMAR REMAJA, JENDELA SORE, RAK BUKU & MEJA WORKBENCH
+// ============================================================================
+function renderEnvironment3D(ctx, cam, state) {
+  const { darkMode, ledGlow, time } = state;
+  const darkFactor = clamp(darkMode, 0, 1);
+
+  // 1. Dinding Kamar (Gradasi hangat sore vs biru gelap malam/mode uji)
+  const wallGrad = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+  if (darkFactor < 0.5) {
+    wallGrad.addColorStop(0, "#2c221e");
+    wallGrad.addColorStop(0.55, "#433228");
+    wallGrad.addColorStop(1, "#1e1612");
+  } else {
+    wallGrad.addColorStop(0, "#070b14");
+    wallGrad.addColorStop(0.55, "#0f172a");
+    wallGrad.addColorStop(1, "#05080f");
+  }
+  ctx.fillStyle = wallGrad;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  // Interpolasi overlay gelap saat lampu kamar dimatikan
+  if (darkFactor > 0) {
+    ctx.save();
+    ctx.fillStyle = `rgba(6, 10, 22, ${darkFactor * 0.72})`;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    ctx.restore();
+  }
+
+  // 2. Elemen Latar Belakang (Hanya tampak jelas saat kamera tidak full top-down)
+  const camPitch = (cam.pos.y - cam.target.y) / Math.hypot(cam.pos.x - cam.target.x, cam.pos.y - cam.target.y, cam.pos.z - cam.target.z);
+  const bgVisibility = clamp(1 - (camPitch - 0.55) * 2.5, 0, 1);
+
+  if (bgVisibility > 0.02) {
+    ctx.save();
+    ctx.globalAlpha = bgVisibility;
+
+    // A. Jendela Kamar di Kiri Belakang (Cahaya Matahari Sore / Golden Hour)
+    const winX = 110, winY = 70, winW = 310, winH = 420;
+    const skyGrad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
+    if (darkFactor < 0.6) {
+      skyGrad.addColorStop(0, "#f97316");
+      skyGrad.addColorStop(0.5, "#fb923c");
+      skyGrad.addColorStop(1, "#fde047");
+    } else {
+      skyGrad.addColorStop(0, "#1e1b4b");
+      skyGrad.addColorStop(0.6, "#312e81");
+      skyGrad.addColorStop(1, "#7c2d12");
+    }
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(winX, winY, winW, winH);
+
+    // Matahari sore & siluet pohon luar jendela
+    ctx.fillStyle = darkFactor < 0.6 ? "rgba(254, 240, 138, 0.85)" : "rgba(251, 146, 60, 0.35)";
     ctx.beginPath();
-    ctx.moveTo(-6, -48);
-    ctx.lineTo(6, -48);
-    ctx.lineTo(10, 22);
-    ctx.lineTo(0, 36);
-    ctx.lineTo(-10, 22);
+    ctx.arc(winX + 210, winY + 260, 52, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Kusen Jendela Kayu
+    ctx.strokeStyle = "#271c15";
+    ctx.lineWidth = 14;
+    ctx.strokeRect(winX, winY, winW, winH);
+    ctx.beginPath();
+    ctx.moveTo(winX + winW * 0.5, winY);
+    ctx.lineTo(winX + winW * 0.5, winY + winH);
+    ctx.moveTo(winX, winY + winH * 0.5);
+    ctx.lineTo(winX + winW, winY + winH * 0.5);
+    ctx.stroke();
+
+    // Sinar Golden Hour (Volumetric Sunbeams) masuk dari jendela
+    const sunBeamAlpha = lerp(0.22, 0.05, darkFactor);
+    const beamGrad = ctx.createLinearGradient(winX + winW, winY + 100, WIDTH * 0.65, HEIGHT * 0.85);
+    beamGrad.addColorStop(0, `rgba(253, 186, 116, ${sunBeamAlpha})`);
+    beamGrad.addColorStop(1, "rgba(253, 186, 116, 0)");
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(winX + winW, winY);
+    ctx.lineTo(WIDTH * 0.72, HEIGHT * 0.65);
+    ctx.lineTo(WIDTH * 0.45, HEIGHT);
+    ctx.lineTo(winX, winY + winH);
     ctx.closePath();
     ctx.fill();
+
+    // B. Poster Skema Elektronika di Dinding Tengah-Kiri
+    const postX = 480, postY = 85, postW = 240, postH = 310;
+    ctx.fillStyle = darkFactor > 0.5 ? "#0f2942" : "#1e3a8a";
+    ctx.strokeStyle = "#93c5fd";
+    ctx.lineWidth = 3;
+    ctx.fillRect(postX, postY, postW, postH);
+    ctx.strokeRect(postX, postY, postW, postH);
+
+    // Grid & Gambar Skema pada Poster
+    ctx.strokeStyle = "rgba(147, 197, 253, 0.35)";
+    ctx.lineWidth = 1;
+    for (let gx = postX + 20; gx < postX + postW; gx += 25) {
+      ctx.beginPath(); ctx.moveTo(gx, postY + 10); ctx.lineTo(gx, postY + postH - 10); ctx.stroke();
+    }
+    for (let gy = postY + 20; gy < postY + postH; gy += 25) {
+      ctx.beginPath(); ctx.moveTo(postX + 10, gy); ctx.lineTo(postX + postW - 10, gy); ctx.stroke();
+    }
+    ctx.fillStyle = "#e0f2fe";
+    ctx.font = "bold 15px monospace";
+    ctx.fillText("JOULE THIEF SCHEMATIC", postX + 22, postY + 34);
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(postX + 40, postY + 75, 160, 110);
+    ctx.beginPath();
+    ctx.arc(postX + 120, postY + 235, 32, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // C. Rak Buku Pelajaran SMA & Kotak Komponen di Kanan Belakang
+    const shelfX = 1410, shelfY = 75, shelfW = 390, shelfH = 430;
+    ctx.fillStyle = darkFactor > 0.5 ? "#1c130e" : "#3e2723";
+    ctx.fillRect(shelfX, shelfY, shelfW, shelfH);
+    ctx.strokeStyle = "#271815";
+    ctx.lineWidth = 10;
+    ctx.strokeRect(shelfX, shelfY, shelfW, shelfH);
+
+    // Sekat Rak
+    for (let sy of [shelfY + 140, shelfY + 280]) {
+      ctx.fillStyle = "#5d4037";
+      ctx.fillRect(shelfX + 5, sy, shelfW - 10, 14);
+    }
+
+    // Buku-buku SMA (Fisika, Matematika, Elektronika Dasar)
+    const books = [
+      { x: shelfX + 24, y: shelfY + 25, w: 34, h: 115, c: "#ef4444", t: "FISIKA XII" },
+      { x: shelfX + 62, y: shelfY + 32, w: 30, h: 108, c: "#3b82f6", t: "KIMIA" },
+      { x: shelfX + 96, y: shelfY + 20, w: 38, h: 120, c: "#10b981", t: "ELEKTRONIKA" },
+      { x: shelfX + 138, y: shelfY + 36, w: 28, h: 104, c: "#f59e0b", t: "MATEMATIKA" },
+      { x: shelfX + 170, y: shelfY + 28, w: 34, h: 112, c: "#8b5cf6", t: "PRAKARYA" }
+    ];
+    books.forEach(b => {
+      ctx.fillStyle = b.c;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.fillRect(b.x + 4, b.y + 12, b.w - 8, 6);
+    });
+
+    // Kotak Laci Komponen (Component Drawer) di Rak Tengah
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 4; c++) {
+        const bx = shelfX + 220 + c * 38;
+        const by = shelfY + 60 + r * 38;
+        ctx.fillStyle = "#1e293b";
+        ctx.fillRect(bx, by, 34, 32);
+        ctx.fillStyle = "#94a3b8";
+        ctx.fillRect(bx + 8, by + 12, 18, 6);
+      }
+    }
+
+    // Trofi / Pajangan Robot Mini di Rak Kedua
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath();
+    ctx.arc(shelfX + 80, shelfY + 215, 28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(shelfX + 62, shelfY + 240, 36, 40);
+
+    ctx.restore();
   }
 
-  // Belahan Jas Lab / Jaket Pelindung
-  ctx.fillStyle = coatColor;
-  drawRoundedRect(ctx, -46, -58, 34, 144, 14);
-  ctx.fill();
-  drawRoundedRect(ctx, 12, -58, 34, 144, 14);
-  ctx.fill();
+  // 3. Permukaan Meja Kayu 3D (Workbench)
+  const deskY = 0;
+  const deskCorners = [
+    { x: -780, y: deskY, z: -260 },
+    { x: 780, y: deskY, z: -260 },
+    { x: 780, y: deskY, z: 380 },
+    { x: -780, y: deskY, z: 380 }
+  ];
+  const deskColor = darkFactor > 0.5 ? "#231710" : "#5c3a21";
+  const deskStroke = darkFactor > 0.5 ? "#140d09" : "#3b2313";
+  drawPolygon3D(ctx, cam, deskCorners, deskColor, deskStroke, 3);
 
-  // Kerah Jas & Lencana Radiasi
-  ctx.strokeStyle = "#cbd5e1";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(-14, -56);
-  ctx.lineTo(-32, -20);
-  ctx.lineTo(-12, -10);
-  ctx.moveTo(14, -56);
-  ctx.lineTo(32, -20);
-  ctx.lineTo(12, -10);
-  ctx.stroke();
+  // Sisi Depan Tebal Meja
+  const deskFront = [
+    { x: -780, y: deskY, z: -260 },
+    { x: 780, y: deskY, z: -260 },
+    { x: 780, y: deskY - 45, z: -260 },
+    { x: -780, y: deskY - 45, z: -260 }
+  ];
+  drawPolygon3D(ctx, cam, deskFront, darkFactor > 0.5 ? "#160e09" : "#3d2514");
 
-  // Lencana Dosimeter di Dada Kanan
-  ctx.fillStyle = "#facc15";
-  ctx.beginPath();
-  ctx.arc(28, -8, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#111827";
-  ctx.beginPath();
-  ctx.arc(28, -8, 3, 0, Math.PI * 2);
-  ctx.fill();
+  // 4. Alas Potong Hijau (Green Cutting Mat dengan Grid Presisi)
+  const matCorners = [
+    { x: -340, y: deskY + 1.5, z: -185 },
+    { x: 340, y: deskY + 1.5, z: -185 },
+    { x: 340, y: deskY + 1.5, z: 165 },
+    { x: -340, y: deskY + 1.5, z: 165 }
+  ];
+  const matColor = darkFactor > 0.5 ? "#064e3b" : "#059669";
+  drawPolygon3D(ctx, cam, matCorners, matColor, "#34d399", 2);
 
-  // Rompi Timbal (Lead Apron) untuk Liquidator
-  if (role === "liquidator" || role === "firefighter") {
-    ctx.fillStyle = role === "liquidator" ? "rgba(30, 41, 59, 0.85)" : "rgba(234, 179, 8, 0.85)";
-    ctx.fillRect(-44, 12, 88, 22);
+  // Garis Grid di atas Cutting Mat
+  ctx.save();
+  ctx.strokeStyle = darkFactor > 0.5 ? "rgba(110, 231, 183, 0.16)" : "rgba(209, 250, 229, 0.28)";
+  ctx.lineWidth = 1;
+  for (let gx = -300; gx <= 300; gx += 40) {
+    const p1 = cam.project(gx, deskY + 1.8, -175);
+    const p2 = cam.project(gx, deskY + 1.8, 155);
+    if (p1.visible && p2.visible) {
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    }
+  }
+  for (let gz = -160; gz <= 140; gz += 40) {
+    const p1 = cam.project(-325, deskY + 1.8, gz);
+    const p2 = cam.project(325, deskY + 1.8, gz);
+    if (p1.visible && p2.visible) {
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    }
   }
   ctx.restore();
 
-  // ---- LEHER & KEPALA ARTIKULASI ----
-  ctx.save();
-  const headTilt =
-    emotion === "shocked" || emotion === "panicked"
-      ? Math.sin(time * 14) * 0.05
-      : Math.sin(time * 1.8) * 0.06;
-  ctx.translate(0, -64);
-  ctx.rotate(headTilt);
-
-  // Leher
-  ctx.fillStyle = skinColor;
-  drawRoundedRect(ctx, -13, -16, 26, 26, 8);
-  ctx.fill();
-
-  // Wajah / Kepala
-  ctx.fillStyle = skinColor;
-  drawRoundedRect(ctx, -38, -92, 76, 82, 32);
-  ctx.fill();
-
-  // Telinga
-  ctx.beginPath();
-  ctx.arc(-38, -50, 9, 0, Math.PI * 2);
-  ctx.arc(38, -50, 9, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Rambut / Topi Operator Chernobyl / Helm Pemadam / Masker Gas Liquidator
-  if (role === "scientist") {
-    ctx.fillStyle = "#1e293b";
-    ctx.beginPath();
-    ctx.arc(0, -76, 40, Math.PI * 0.95, Math.PI * 2.05);
-    ctx.fill();
-    // Jambul rambut dinamis
-    ctx.beginPath();
-    ctx.moveTo(-20, -98);
-    ctx.quadraticCurveTo(5, -118, 28, -94);
-    ctx.fill();
-  } else if (role === "operator") {
-    // Topi Putih Khas Operator Reaktor Nuklir Soviet (Shapka Putih)
-    ctx.fillStyle = "#f8fafc";
-    drawRoundedRect(ctx, -40, -112, 80, 34, 10);
-    ctx.fill();
-    ctx.strokeStyle = "#94a3b8";
-    ctx.lineWidth = 2.5;
-    ctx.strokeRect(-36, -90, 72, 8);
-  } else if (role === "firefighter") {
-    // Helm Pemadam Kebakaran Chernobyl
-    ctx.fillStyle = "#b91c1c";
-    ctx.beginPath();
-    ctx.arc(0, -78, 44, Math.PI, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#facc15";
-    ctx.fillRect(-48, -80, 96, 8);
-  } else if (role === "liquidator") {
-    // Tudung Hazmat & Respirator Gas Mask
-    ctx.fillStyle = "#3f6212";
-    ctx.beginPath();
-    ctx.arc(0, -68, 44, Math.PI * 0.8, Math.PI * 2.2);
-    ctx.fill();
-  }
-
-  // ---- MATA, KEDIPAN, ALIS, DAN KACAMATA ----
-  const blinkCycle = time % 3.8;
-  const isBlinking = blinkCycle > 3.65;
-  const eyeScaleY = isBlinking ? 0.1 : emotion === "shocked" || emotion === "panicked" ? 1.35 : 1.0;
-
-  const drawEye = (ex) => {
-    ctx.save();
-    ctx.translate(ex, -56);
-    ctx.scale(1, eyeScaleY);
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 10, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Pupil bergerak hidup
-    const lookX = Math.sin(time * 1.4) * 2.5 + (facing > 0 ? 1.5 : -1.5);
-    const pupilR = emotion === "shocked" || emotion === "panicked" ? 3.2 : 4.8;
-    ctx.fillStyle = "#0f172a";
-    ctx.beginPath();
-    ctx.arc(lookX, 0, pupilR, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Pantulan cahaya mata
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.arc(lookX + 1.8, -2, 1.6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  };
-
-  drawEye(-15);
-  drawEye(15);
-
-  // Alis Ekspresif
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 4;
-  ctx.lineCap = "round";
-  const browLift =
-    emotion === "shocked" ? -7 : emotion === "panicked" ? -5 : isSpeaking ? Math.sin(speechPhase * 8) * 3 : 0;
-  const browTilt = emotion === "panicked" || emotion === "somber" ? -4 : 2;
-
-  ctx.beginPath();
-  ctx.moveTo(-26, -68 + browLift - browTilt);
-  ctx.lineTo(-6, -70 + browLift + browTilt);
-  ctx.moveTo(6, -70 + browLift + browTilt);
-  ctx.lineTo(26, -68 + browLift - browTilt);
-  ctx.stroke();
-
-  // Kacamata Ilmuwan
-  if (role === "scientist") {
-    ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 3;
-    drawRoundedRect(ctx, -28, -66, 24, 18, 5);
-    ctx.stroke();
-    drawRoundedRect(ctx, 4, -66, 24, 18, 5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-4, -57);
-    ctx.lineTo(4, -57);
-    ctx.stroke();
-  }
-
-  // ---- MULUT LIP-SYNC REALISTIS ATAU MASKER RESPIRATOR ----
-  if (role === "liquidator") {
-    // Masker Respirator Anti-Radiasi
-    ctx.fillStyle = "#1e293b";
-    drawRoundedRect(ctx, -22, -44, 44, 30, 12);
-    ctx.fill();
-    ctx.fillStyle = "#475569";
-    ctx.beginPath();
-    ctx.arc(-14, -28, 9, 0, Math.PI * 2);
-    ctx.arc(14, -28, 9, 0, Math.PI * 2);
-    ctx.fill();
-  } else {
-    ctx.save();
-    ctx.translate(0, -28);
-    if (isSpeaking) {
-      const openAmount =
-        0.25 +
-        0.75 * Math.abs(Math.sin(speechPhase * 13.5) * Math.cos(speechPhase * 7.2));
-      const mouthW = 14 + openAmount * 8;
-      const mouthH = 4 + openAmount * 14;
-      ctx.fillStyle = "#450a0a";
-      ctx.beginPath();
-      ctx.ellipse(0, 0, mouthW * 0.6, mouthH * 0.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Gigi atas & lidah
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(-mouthW * 0.38, -mouthH * 0.5, mouthW * 0.76, 3.5);
-      ctx.fillStyle = "#ef4444";
-      ctx.beginPath();
-      ctx.ellipse(0, mouthH * 0.25, mouthW * 0.35, mouthH * 0.25, 0, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (emotion === "shocked" || emotion === "panicked") {
-      ctx.fillStyle = "#450a0a";
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 9, 11, 0, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (emotion === "somber") {
-      ctx.strokeStyle = "#7c2d12";
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.moveTo(-10, 3);
-      ctx.quadraticCurveTo(0, -3, 10, 3);
-      ctx.stroke();
-    } else {
-      ctx.strokeStyle = "#7c2d12";
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.moveTo(-11, -2);
-      ctx.quadraticCurveTo(0, 5, 11, -2);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-  ctx.restore(); // Akhir kepala
-
-  // ---- LENGAN DEPAN ARTIKULASI & PROPERTI CERITA ----
-  ctx.save();
-  ctx.translate(34, -42);
-  const gestureWave = isSpeaking ? Math.sin(time * 5.2) * 0.22 : Math.sin(time * 2.0) * 0.08;
-  const upperArmRot = pointAngle + gestureWave;
-  ctx.rotate(upperArmRot);
-
-  // Lengan Atas
-  ctx.strokeStyle = coatColor;
-  ctx.lineWidth = 21;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(48, 18);
-  ctx.stroke();
-
-  // Siku & Lengan Bawah
-  ctx.translate(48, 18);
-  ctx.rotate(-0.45 + gestureWave * 0.8);
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(52, -10);
-  ctx.stroke();
-
-  // Tangan Depan
-  ctx.translate(52, -10);
-  ctx.fillStyle = role === "liquidator" ? "#1f2937" : skinColor;
-  ctx.beginPath();
-  ctx.arc(0, 0, 11, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Properti yang Dipegang Tangan Karakter
-  if (prop === "atom_orb") {
-    const pulse = 1 + 0.15 * Math.sin(time * 6);
-    const grad = ctx.createRadialGradient(18, -18, 2, 18, -18, 42 * pulse);
-    grad.addColorStop(0, "#ffffff");
-    grad.addColorStop(0.35, "#00f2fe");
-    grad.addColorStop(1, "rgba(0, 242, 254, 0)");
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(18, -18, 42 * pulse, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Orbit elektron mini di tangan
-    ctx.strokeStyle = "rgba(56, 239, 125, 0.85)";
-    ctx.lineWidth = 2;
-    for (let k = 0; k < 3; k++) {
+  // Cahaya Pantulan LED Joule Thief pada Meja saat Mode Gelap
+  if (ledGlow > 0.02) {
+    const glowPos = cam.project(0, deskY + 15, -10);
+    if (glowPos.visible) {
       ctx.save();
-      ctx.translate(18, -18);
-      ctx.rotate((k * Math.PI) / 3 + time * 2.2);
+      const rad = 360 * glowPos.scale * 0.55;
+      const g = ctx.createRadialGradient(glowPos.x, glowPos.y, 10, glowPos.x, glowPos.y, rad);
+      g.addColorStop(0, `rgba(186, 230, 253, ${0.55 * ledGlow})`);
+      g.addColorStop(0.5, `rgba(56, 189, 248, ${0.22 * ledGlow})`);
+      g.addColorStop(1, "rgba(56, 189, 248, 0)");
+      ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.ellipse(0, 0, 28, 9, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.arc(glowPos.x, glowPos.y, rad, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
-  } else if (prop === "pointer") {
-    ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 5;
+  }
+}
+
+// ============================================================================
+// 5. DESAIN KARAKTER 3D: UDIN (REMAJA SMA 17 TAHUN, RIGGING WAJAH & TANGAN)
+// ============================================================================
+function renderUdin3D(ctx, cam, state) {
+  const {
+    time,
+    udinVisible = 1,
+    expression = "smile", // "smile" | "surprised" | "focused" | "proud"
+    speaking = false,
+    leftHandPos = { x: -120, y: 45, z: -40 },
+    rightHandPos = { x: 120, y: 45, z: -40 },
+    leftHandGesture = "open",  // "open" | "point" | "hold" | "thumbsup"
+    rightHandGesture = "open",
+    headTilt = 0,
+    headYaw = 0,
+    shrug = 0,
+    darkMode = 0,
+    ledGlow = 0
+  } = state;
+
+  if (udinVisible <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = clamp(udinVisible, 0, 1);
+
+  const breath = Math.sin(time * 2.6) * 2.5;
+  const shoulderY = 148 + breath + shrug * 16;
+  const bodyZ = 185;
+
+  // Warna Seragam SMA Indonesia (dipengaruhi pencahayaan kamar & cahaya LED)
+  const shirtMain = darkMode > 0.5 ? (ledGlow > 0.5 ? "#cbd5e1" : "#64748b") : "#f8fafc";
+  const shirtShadow = darkMode > 0.5 ? "#334155" : "#cbd5e1";
+  const skinMain = darkMode > 0.5 ? (ledGlow > 0.5 ? "#e2b897" : "#9a6b4c") : "#f1c27d";
+  const skinShadow = darkMode > 0.5 ? "#5c3d28" : "#c68642";
+
+  // 1. Torso / Kemeja Putih SMA
+  const torsoPts = [
+    { x: -95, y: shoulderY, z: bodyZ },
+    { x: 95, y: shoulderY, z: bodyZ },
+    { x: 78, y: 0, z: bodyZ - 15 },
+    { x: -78, y: 0, z: bodyZ - 15 }
+  ];
+  drawPolygon3D(ctx, cam, torsoPts, shirtMain, shirtShadow, 2);
+
+  // Kerah Kemeja & Dasi SMA Abu-abu (agak dilonggarkan)
+  const collarL = [
+    { x: -36, y: shoulderY + 6, z: bodyZ - 6 },
+    { x: -8, y: shoulderY - 22, z: bodyZ - 12 },
+    { x: -4, y: shoulderY + 4, z: bodyZ - 8 }
+  ];
+  const collarR = [
+    { x: 36, y: shoulderY + 6, z: bodyZ - 6 },
+    { x: 8, y: shoulderY - 22, z: bodyZ - 12 },
+    { x: 4, y: shoulderY + 4, z: bodyZ - 8 }
+  ];
+  drawPolygon3D(ctx, cam, collarL, "#e2e8f0", "#94a3b8", 1.5);
+  drawPolygon3D(ctx, cam, collarR, "#e2e8f0", "#94a3b8", 1.5);
+
+  // Simpul & Untaian Dasi Abu-abu
+  const tieKnot = [
+    { x: -11, y: shoulderY - 12, z: bodyZ - 13 },
+    { x: 11, y: shoulderY - 12, z: bodyZ - 13 },
+    { x: 7, y: shoulderY - 28, z: bodyZ - 14 },
+    { x: -7, y: shoulderY - 28, z: bodyZ - 14 }
+  ];
+  const tieBody = [
+    { x: -7, y: shoulderY - 28, z: bodyZ - 14 },
+    { x: 7, y: shoulderY - 28, z: bodyZ - 14 },
+    { x: 14, y: shoulderY - 105, z: bodyZ - 18 },
+    { x: 0, y: shoulderY - 122, z: bodyZ - 18 },
+    { x: -14, y: shoulderY - 105, z: bodyZ - 18 }
+  ];
+  drawPolygon3D(ctx, cam, tieKnot, "#475569", "#1e293b", 1.5);
+  drawPolygon3D(ctx, cam, tieBody, "#64748b", "#334155", 1.5);
+
+  // Badge OSIS SMA di Saku Kiri
+  const pocket = [
+    { x: 28, y: shoulderY - 45, z: bodyZ - 12 },
+    { x: 64, y: shoulderY - 45, z: bodyZ - 12 },
+    { x: 64, y: shoulderY - 88, z: bodyZ - 14 },
+    { x: 28, y: shoulderY - 88, z: bodyZ - 14 }
+  ];
+  drawPolygon3D(ctx, cam, pocket, shirtMain, "#94a3b8", 1.5);
+  drawSphere3D(ctx, cam, { x: 46, y: shoulderY - 64, z: bodyZ - 15 }, 9, "#f59e0b", "#b45309");
+
+  // 2. Leher & Kepala 3D Stylized
+  const neckTop = { x: headYaw * 12, y: shoulderY + 26, z: bodyZ - 10 };
+  drawCapsule3D(ctx, cam, { x: 0, y: shoulderY - 4, z: bodyZ - 8 }, neckTop, 20, skinMain, skinMain, skinShadow);
+
+  const headCenter = {
+    x: headYaw * 18,
+    y: shoulderY + 72,
+    z: bodyZ - 18
+  };
+  const hp = drawSphere3D(ctx, cam, headCenter, 54, skinMain, skinShadow);
+
+  if (hp.visible) {
+    const r = 54 * hp.scale;
+    ctx.save();
+    ctx.translate(hp.x, hp.y);
+    ctx.rotate(headTilt);
+
+    // Telinga Kiri & Kanan
+    ctx.fillStyle = skinMain;
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(85, -55);
-    ctx.stroke();
-    ctx.fillStyle = "#00f2fe";
-    ctx.beginPath();
-    ctx.arc(85, -55, 7, 0, Math.PI * 2);
+    ctx.ellipse(-r * 0.95, r * 0.05, r * 0.18, r * 0.28, 0, 0, Math.PI * 2);
+    ctx.ellipse(r * 0.95, r * 0.05, r * 0.18, r * 0.28, 0, 0, Math.PI * 2);
     ctx.fill();
-  } else if (prop === "geiger") {
-    // Alat Detektor Radiasi Dosimeter Kuning
-    ctx.fillStyle = "#eab308";
-    drawRoundedRect(ctx, -6, -24, 42, 28, 5);
-    ctx.fill();
-    ctx.strokeStyle = "#f8fafc";
-    ctx.lineWidth = 4;
+
+    // Rambut Hitam Agak Acak-acakan Khas Anak Baru Pulang Sekolah
+    ctx.fillStyle = "#0f172a";
     ctx.beginPath();
-    ctx.moveTo(36, -10);
-    ctx.lineTo(75, -30 + Math.sin(time * 8) * 8);
+    ctx.arc(0, -r * 0.18, r * 1.04, Math.PI * 0.92, Math.PI * 2.08);
+    // Jambul & helai rambut acak
+    ctx.lineTo(r * 0.95, -r * 0.55);
+    ctx.lineTo(r * 0.65, -r * 1.18);
+    ctx.lineTo(r * 0.25, -r * 0.98);
+    ctx.lineTo(-r * 0.05, -r * 1.26);
+    ctx.lineTo(-r * 0.42, -r * 0.96);
+    ctx.lineTo(-r * 0.82, -r * 1.12);
+    ctx.lineTo(-r * 1.05, -r * 0.45);
+    ctx.closePath();
+    ctx.fill();
+
+    // Poni depan menyapu dahi
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.75, -r * 0.42);
+    ctx.quadraticCurveTo(-r * 0.3, -r * 0.1, -r * 0.1, -r * 0.48);
+    ctx.quadraticCurveTo(r * 0.2, -r * 0.08, r * 0.48, -r * 0.45);
+    ctx.quadraticCurveTo(r * 0.7, -r * 0.2, r * 0.85, -r * 0.42);
+    ctx.lineTo(r * 0.85, -r * 0.75);
+    ctx.lineTo(-r * 0.85, -r * 0.75);
+    ctx.closePath();
+    ctx.fill();
+
+    // Facial Blendshapes: Alis, Mata, dan Mulut
+    const eyeY = -r * 0.02;
+    const eyeSep = r * 0.36;
+    const blink = (Math.sin(time * 3.1) > 0.97) ? 0.12 : 1.0;
+
+    let browLift = 0;
+    let browTilt = 0;
+    let eyeSquint = 1.0;
+
+    if (expression === "surprised") {
+      browLift = -r * 0.14;
+      eyeSquint = 1.22;
+    } else if (expression === "focused") {
+      browLift = r * 0.06;
+      browTilt = 0.22;
+      eyeSquint = 0.62;
+    } else if (expression === "proud") {
+      browLift = -r * 0.05;
+      browTilt = -0.08;
+    }
+
+    // Gambar Mata Kiri & Kanan
+    [-1, 1].forEach(dir => {
+      const ex = dir * eyeSep + headYaw * r * 0.18;
+      const ey = eyeY;
+
+      // Sklera putih
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, r * 0.16, r * 0.17 * blink * eyeSquint, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Iris & Pupil Cokelat Tua
+      if (blink > 0.2) {
+        ctx.fillStyle = "#1e1b18";
+        ctx.beginPath();
+        ctx.arc(ex + headYaw * r * 0.05, ey + r * 0.02, r * 0.09 * eyeSquint, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Pantulan cahaya mata (eye catchlight)
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(ex - r * 0.03, ey - r * 0.03, r * 0.035, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Alis Ekspresif
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = Math.max(2.5, r * 0.075);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      const by = ey - r * 0.24 + browLift;
+      ctx.moveTo(ex - r * 0.17, by - dir * browTilt * r * 0.12);
+      ctx.quadraticCurveTo(ex, by - r * 0.06, ex + r * 0.17, by + dir * browTilt * r * 0.12);
+      ctx.stroke();
+    });
+
+    // Hidung 3D Stylized
+    ctx.strokeStyle = skinShadow;
+    ctx.lineWidth = Math.max(2, r * 0.045);
+    ctx.beginPath();
+    ctx.moveTo(headYaw * r * 0.2, eyeY + r * 0.05);
+    ctx.lineTo(headYaw * r * 0.25 - r * 0.04, eyeY + r * 0.28);
+    ctx.lineTo(headYaw * r * 0.2, eyeY + r * 0.31);
     ctx.stroke();
+
+    // Mulut (Lip-Sync & Blendshapes)
+    const mouthY = r * 0.44;
+    const mouthX = headYaw * r * 0.18;
+    const talkOpen = speaking ? (0.35 + 0.65 * Math.abs(Math.sin(time * 14.5))) : 0;
+
+    if (expression === "surprised" && !speaking) {
+      ctx.fillStyle = "#7f1d1d";
+      ctx.beginPath();
+      ctx.ellipse(mouthX, mouthY, r * 0.13, r * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (expression === "focused" && !speaking) {
+      ctx.strokeStyle = "#7c2d12";
+      ctx.lineWidth = Math.max(2.5, r * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(mouthX - r * 0.16, mouthY);
+      ctx.lineTo(mouthX + r * 0.14, mouthY - r * 0.03);
+      ctx.stroke();
+    } else {
+      // Senyum ramah / bangga atau sedang berbicara
+      const smileWidth = expression === "proud" ? r * 0.28 : r * 0.22;
+      const openH = speaking ? r * (0.06 + 0.16 * talkOpen) : (expression === "proud" ? r * 0.12 : r * 0.04);
+
+      ctx.fillStyle = "#7f1d1d";
+      ctx.beginPath();
+      ctx.moveTo(mouthX - smileWidth, mouthY - r * 0.03);
+      ctx.quadraticCurveTo(mouthX, mouthY + openH * 1.6, mouthX + smileWidth, mouthY - r * 0.03);
+      ctx.quadraticCurveTo(mouthX, mouthY + r * 0.02, mouthX - smileWidth, mouthY - r * 0.03);
+      ctx.closePath();
+      ctx.fill();
+
+      // Baris gigi atas saat tersenyum lebar / bicara
+      if (openH > r * 0.06) {
+        ctx.fillStyle = "#f8fafc";
+        ctx.beginPath();
+        ctx.rect(mouthX - smileWidth * 0.65, mouthY - r * 0.01, smileWidth * 1.3, r * 0.055);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // 3. Sistem Rigging Lengan (Lengan Kemeja Digulung sampai Siku + Gelang Karet Hitam di Tangan Kiri)
+  // Di ruang kamera 3D: Sisi Kanan Karakter (Tangan Kanan Udin) berada di X negatif,
+  // Sisi Kiri Karakter (Tangan Kiri Udin dengan gelang karet hitam) berada di X positif.
+  const rightShoulder = { x: -92, y: shoulderY - 8, z: bodyZ - 5 };
+  const leftShoulder = { x: 92, y: shoulderY - 8, z: bodyZ - 5 };
+
+  const rightElbow = {
+    x: lerp(rightShoulder.x, rightHandPos.x, 0.48) - 28,
+    y: Math.min(shoulderY - 45, (rightShoulder.y + rightHandPos.y) * 0.5 - 12),
+    z: (rightShoulder.z + rightHandPos.z) * 0.5 + 18
+  };
+  const leftElbow = {
+    x: lerp(leftShoulder.x, leftHandPos.x, 0.48) + 28,
+    y: Math.min(shoulderY - 45, (leftShoulder.y + leftHandPos.y) * 0.5 - 12),
+    z: (leftShoulder.z + leftHandPos.z) * 0.5 + 18
+  };
+
+  // Lengan Atas (Tertutup Kemeja Putih + Lipatan di Siku)
+  drawCapsule3D(ctx, cam, rightShoulder, rightElbow, 21, shirtMain, "#ffffff", shirtShadow);
+  drawCapsule3D(ctx, cam, leftShoulder, leftElbow, 21, shirtMain, "#ffffff", shirtShadow);
+
+  // Gulungan Lengan Kemeja di Siku (Rolled-up cuffs)
+  drawSphere3D(ctx, cam, rightElbow, 23, "#e2e8f0", "#94a3b8");
+  drawSphere3D(ctx, cam, leftElbow, 23, "#e2e8f0", "#94a3b8");
+
+  // Lengan Bawah (Kulit)
+  drawCapsule3D(ctx, cam, rightElbow, rightHandPos, 15, skinMain, skinMain, skinShadow);
+  drawCapsule3D(ctx, cam, leftElbow, leftHandPos, 15, skinMain, skinMain, skinShadow);
+
+  // Gelang Karet Hitam di Pergelangan Tangan Kiri Udin
+  const wristLeft = {
+    x: lerp(leftElbow.x, leftHandPos.x, 0.84),
+    y: lerp(leftElbow.y, leftHandPos.y, 0.84),
+    z: lerp(leftElbow.z, leftHandPos.z, 0.84)
+  };
+  drawSphere3D(ctx, cam, wristLeft, 17.5, "#1e293b", "#020617");
+
+  // 4. Hand Rig & Jari Artikulatif
+  renderArticulatedHand3D(ctx, cam, rightHandPos, rightHandGesture, false, skinMain, skinShadow);
+  renderArticulatedHand3D(ctx, cam, leftHandPos, leftHandGesture, true, skinMain, skinShadow);
+
+  ctx.restore();
+}
+
+function renderArticulatedHand3D(ctx, cam, pos, gesture, isLeft, skinMain, skinShadow) {
+  // Telapak tangan
+  const palm = drawSphere3D(ctx, cam, pos, 17, skinMain, skinShadow);
+  if (!palm.visible) return;
+
+  const dirSign = isLeft ? -1 : 1;
+
+  if (gesture === "thumbsup") {
+    // Kepalan jari
+    drawSphere3D(ctx, cam, { x: pos.x + dirSign * 6, y: pos.y - 2, z: pos.z - 8 }, 15, skinMain, skinShadow);
+    // Jempol mengacung ke atas dengan tegas
+    drawCapsule3D(
+      ctx,
+      cam,
+      { x: pos.x, y: pos.y + 8, z: pos.z - 6 },
+      { x: pos.x, y: pos.y + 42, z: pos.z - 10 },
+      7.5,
+      skinMain,
+      skinMain,
+      skinShadow
+    );
+  } else if (gesture === "point") {
+    // Jari telunjuk menunjuk ke komponen
+    drawCapsule3D(
+      ctx,
+      cam,
+      pos,
+      { x: pos.x + dirSign * 18, y: pos.y - 12, z: pos.z - 34 },
+      6,
+      skinMain,
+      skinMain,
+      skinShadow
+    );
+    // Jari lain menekuk
+    for (let i = 1; i <= 3; i++) {
+      drawSphere3D(ctx, cam, { x: pos.x - dirSign * (i * 5), y: pos.y - 6, z: pos.z - 12 }, 6.5, skinMain, skinShadow);
+    }
+  } else if (gesture === "hold") {
+    // Jari mencubit/memegang komponen atau baterai
+    drawCapsule3D(ctx, cam, pos, { x: pos.x + dirSign * 14, y: pos.y - 6, z: pos.z - 22 }, 6, skinMain, skinMain, skinShadow);
+    drawCapsule3D(ctx, cam, pos, { x: pos.x + dirSign * 4, y: pos.y - 12, z: pos.z - 24 }, 6, skinMain, skinMain, skinShadow);
+  } else {
+    // Gestur tangan terbuka ekspresif (5 jari artikulatif)
+    const fingerOffsets = [
+      { dx: dirSign * 18, dy: 10, dz: -14 },
+      { dx: dirSign * 12, dy: 4, dz: -26 },
+      { dx: 0, dy: 2, dz: -28 },
+      { dx: -dirSign * 10, dy: 0, dz: -25 },
+      { dx: -dirSign * 18, dy: -4, dz: -20 }
+    ];
+    fingerOffsets.forEach(fo => {
+      drawCapsule3D(
+        ctx,
+        cam,
+        pos,
+        { x: pos.x + fo.dx, y: pos.y + fo.dy, z: pos.z + fo.dz },
+        5.2,
+        skinMain,
+        skinMain,
+        skinShadow
+      );
+    });
+  }
+}
+
+// ============================================================================
+// 6. ASET 3D KOMPONEN ELEKTRONIK & ALAT BENGKEL (WORKBENCH PROPS)
+// ============================================================================
+
+// A. Multitester Digital (dengan layar LCD animasi angka voltase)
+function renderMultimeter3D(ctx, cam, pos, lcdText = "0.85 V", showProbes = false, probeTarget = null) {
+  const { x, y, z } = pos;
+  // Bodi Kuning/Oranye Pelindung Karet Multitester
+  const bodyPts = [
+    { x: x - 48, y: y + 6, z: z + 65 },
+    { x: x + 48, y: y + 6, z: z + 65 },
+    { x: x + 48, y: y + 2, z: z - 65 },
+    { x: x - 48, y: y + 2, z: z - 65 }
+  ];
+  drawPolygon3D(ctx, cam, bodyPts, "#f59e0b", "#b45309", 3);
+
+  // Panel Dalam Abu-abu Gelap
+  const innerPts = [
+    { x: x - 40, y: y + 8, z: z + 56 },
+    { x: x + 40, y: y + 8, z: z + 56 },
+    { x: x + 40, y: y + 4, z: z - 56 },
+    { x: x - 40, y: y + 4, z: z - 56 }
+  ];
+  drawPolygon3D(ctx, cam, innerPts, "#1e293b", "#0f172a", 1.5);
+
+  // Layar LCD Hijau Klasik
+  const lcdPts = [
+    { x: x - 34, y: y + 10, z: z + 48 },
+    { x: x + 34, y: y + 10, z: z + 48 },
+    { x: x + 34, y: y + 8, z: z + 14 },
+    { x: x - 34, y: y + 8, z: z + 14 }
+  ];
+  drawPolygon3D(ctx, cam, lcdPts, "#84cc16", "#3f6212", 2);
+
+  // Teks Angka Digital di Layar Multitester
+  const lcdCenter = cam.project(x, y + 12, z + 30);
+  if (lcdCenter.visible) {
+    ctx.save();
+    ctx.fillStyle = "#0f172a";
+    const fontSize = Math.max(12, Math.round(18 * lcdCenter.scale * 0.42));
+    ctx.font = `bold ${fontSize}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(lcdText, lcdCenter.x, lcdCenter.y);
+    ctx.restore();
+  }
+
+  // Dial Putar Tengah Multitester
+  drawSphere3D(ctx, cam, { x, y: y + 10, z: z - 15 }, 20, "#334155", "#0f172a");
+
+  // Kabel & Probe Merah-Hitam jika aktif mengukur
+  if (showProbes && probeTarget) {
+    drawCapsule3D(
+      ctx,
+      cam,
+      { x: x - 16, y: y + 8, z: z - 50 },
+      { x: probeTarget.x - 28, y: probeTarget.y + 8, z: probeTarget.z },
+      3.2,
+      "#ef4444",
+      "#f87171",
+      "#991b1b"
+    );
+    drawCapsule3D(
+      ctx,
+      cam,
+      { x: x + 16, y: y + 8, z: z - 50 },
+      { x: probeTarget.x + 28, y: probeTarget.y + 8, z: probeTarget.z },
+      3.2,
+      "#1e293b",
+      "#475569",
+      "#020617"
+    );
+  }
+}
+
+// B. Dudukan Solder, Solder Panas (Glow Oranye Tipis), Timah & Tang Potong
+function renderWorkbenchTools3D(ctx, cam, solderIronPos = null, solderGlow = 0.7) {
+  // Dudukan Solder di Kanan Meja
+  const standBase = [
+    { x: 245, y: 2, z: 45 },
+    { x: 325, y: 2, z: 45 },
+    { x: 325, y: 2, z: 135 },
+    { x: 245, y: 2, z: 135 }
+  ];
+  drawPolygon3D(ctx, cam, standBase, "#334155", "#0f172a", 2);
+
+  // Gulungan Timah (Solder Wire Spool) di Kanan Depan
+  drawSphere3D(ctx, cam, { x: 265, y: 18, z: -45 }, 22, "#94a3b8", "#475569");
+  drawSphere3D(ctx, cam, { x: 265, y: 22, z: -45 }, 12, "#3b82f6", "#1d4ed8");
+
+  // Tang Potong (Side Cutter Pliers) di Kiri Atas Cutting Mat
+  drawCapsule3D(ctx, cam, { x: -275, y: 6, z: 95 }, { x: -235, y: 6, z: 135 }, 6, "#ef4444", "#f87171", "#991b1b");
+  drawCapsule3D(ctx, cam, { x: -255, y: 6, z: 85 }, { x: -225, y: 6, z: 130 }, 6, "#ef4444", "#f87171", "#991b1b");
+  drawCapsule3D(ctx, cam, { x: -230, y: 7, z: 132 }, { x: -212, y: 7, z: 152 }, 5, "#cbd5e1", "#f8fafc", "#475569");
+
+  // Solder Panas (Bisa berada di dudukan atau bergerak menyolder komponen)
+  const tipPos = solderIronPos || { x: 275, y: 42, z: 75 };
+  const handleStart = { x: tipPos.x + 55, y: tipPos.y + 68, z: tipPos.z + 25 };
+  const metalMid = { x: tipPos.x + 18, y: tipPos.y + 22, z: tipPos.z + 8 };
+
+  // Gagang Solder Biru Tua
+  drawCapsule3D(ctx, cam, handleStart, metalMid, 10, "#1d4ed8", "#60a5fa", "#1e3a8a");
+  // Batang Logam Pemanas
+  drawCapsule3D(ctx, cam, metalMid, tipPos, 4.5, "#cbd5e1", "#ffffff", "#64748b");
+  // Ujung Solder dengan Efek Glow Oranye Tipis
+  drawSphere3D(ctx, cam, tipPos, 5.5, "#fb923c", "#ea580c", "rgba(249, 115, 22, 0.85)", solderGlow);
+}
+
+// C. Inti Ferit Toroid + Lilitan Kawat Bifilar (Merah & Biru)
+function renderToroid3D(ctx, cam, center, radius = 38, windingProgress = 0, xrayMode = 0) {
+  const { x, y, z } = center;
+  const numSegs = 28;
+
+  // Gambar Cincin Donat Ferit Hitam Matte (Transparan saat X-Ray)
+  const coreAlpha = lerp(1.0, 0.32, xrayMode);
+  ctx.save();
+  ctx.globalAlpha = coreAlpha;
+  for (let i = 0; i < numSegs; i++) {
+    const a1 = (i / numSegs) * Math.PI * 2;
+    const a2 = ((i + 1) / numSegs) * Math.PI * 2;
+    const p1 = { x: x + Math.cos(a1) * radius, y: y, z: z + Math.sin(a1) * radius };
+    const p2 = { x: x + Math.cos(a2) * radius, y: y, z: z + Math.sin(a2) * radius };
+    drawCapsule3D(
+      ctx,
+      cam,
+      p1,
+      p2,
+      12,
+      xrayMode > 0.3 ? "#1e293b" : "#18181b",
+      xrayMode > 0.3 ? "#38bdf8" : "#3f3f46",
+      "#09090b"
+    );
   }
   ctx.restore();
+
+  // Lilitan Bifilar: 10 Lilitan Kawat Merah & Kawat Biru Berdampingan
+  const totalTurns = 10;
+  const activeTurns = clamp(windingProgress, 0, 1) * totalTurns;
+  const steps = Math.floor(activeTurns * 12);
+
+  for (let s = 0; s < steps; s++) {
+    const turnIdx = s / 12;
+    const baseAngle = (turnIdx / totalTurns) * Math.PI * 1.65 - Math.PI * 0.82;
+    const poloidalAngle = (s % 12) / 12 * Math.PI * 2;
+    const nextPoloidal = ((s + 1) % 12) / 12 * Math.PI * 2;
+
+    const r1 = radius + Math.cos(poloidalAngle) * 13.5;
+    const y1 = y + Math.sin(poloidalAngle) * 13.5;
+    const r2 = radius + Math.cos(nextPoloidal) * 13.5;
+    const y2 = y + Math.sin(nextPoloidal) * 13.5;
+
+    // Kawat Merah
+    const mr1 = { x: x + Math.cos(baseAngle) * r1, y: y1, z: z + Math.sin(baseAngle) * r1 };
+    const mr2 = { x: x + Math.cos(baseAngle + 0.04) * r2, y: y2, z: z + Math.sin(baseAngle + 0.04) * r2 };
+    drawCapsule3D(ctx, cam, mr1, mr2, 2.4, "#ef4444", "#fca5a5", "#991b1b");
+
+    // Kawat Biru (berdampingan)
+    const bAngle = baseAngle + 0.075;
+    const mb1 = { x: x + Math.cos(bAngle) * r1, y: y1, z: z + Math.sin(bAngle) * r1 };
+    const mb2 = { x: x + Math.cos(bAngle + 0.04) * r2, y: y2, z: z + Math.sin(bAngle + 0.04) * r2 };
+    drawCapsule3D(ctx, cam, mb1, mb2, 2.4, "#3b82f6", "#93c5fd", "#1e3a8a");
+  }
+}
+
+// D. Transistor NPN 2N2222 (Bodi Hitam Setengah Silinder + 3 Kaki E-B-C)
+function renderTransistor3D(ctx, cam, pos, xrayMode = 0, gateOpen = 0) {
+  const { x, y, z } = pos;
+
+  // Tiga Kaki Logam: Kiri = Emitor (E), Tengah = Basis (B), Kanan = Kolektor (C)
+  const legs = [
+    { lx: x - 14, label: "E" },
+    { lx: x, label: "B" },
+    { lx: x + 14, label: "C" }
+  ];
+  legs.forEach(l => {
+    drawCapsule3D(
+      ctx,
+      cam,
+      { x: l.lx, y: y + 18, z },
+      { x: l.lx, y: y - 12, z },
+      2.2,
+      "#cbd5e1",
+      "#ffffff",
+      "#64748b"
+    );
+  });
+
+  // Bodi Hitam TO-92 Setengah Silinder
+  ctx.save();
+  ctx.globalAlpha = lerp(1.0, 0.45, xrayMode);
+  drawCapsule3D(
+    ctx,
+    cam,
+    { x, y: y + 18, z },
+    { x, y: y + 42, z },
+    16,
+    "#18181b",
+    "#52525b",
+    "#09090b"
+  );
+  ctx.restore();
+
+  // Visualisasi Gerbang Internal saat X-Ray Mode
+  if (xrayMode > 0.1) {
+    const coreColor = gateOpen > 0.5 ? "#22c55e" : "#ef4444";
+    const glowColor = gateOpen > 0.5 ? "rgba(34, 197, 94, 0.8)" : "rgba(239, 68, 68, 0.8)";
+    drawSphere3D(ctx, cam, { x, y: y + 28, z }, 8, coreColor, "#ffffff", glowColor, xrayMode * 0.9);
+  }
+}
+
+// E. Resistor 1k Ohm (Warna Krem + Gelang Cokelat-Hitam-Merah-Emas)
+function renderResistor3D(ctx, cam, p1, p2) {
+  // Kawat kaki resistor
+  drawCapsule3D(ctx, cam, p1, p2, 2.0, "#cbd5e1", "#ffffff", "#64748b");
+
+  // Bodi Krem Resistor di tengah
+  const bStart = {
+    x: lerp(p1.x, p2.x, 0.25),
+    y: lerp(p1.y, p2.y, 0.25),
+    z: lerp(p1.z, p2.z, 0.25)
+  };
+  const bEnd = {
+    x: lerp(p1.x, p2.x, 0.75),
+    y: lerp(p1.y, p2.y, 0.75),
+    z: lerp(p1.z, p2.z, 0.75)
+  };
+  drawCapsule3D(ctx, cam, bStart, bEnd, 8.5, "#fde68a", "#fef3c7", "#d97706");
+
+  // 4 Gelang Warna: Cokelat (1), Hitam (0), Merah (x100), Emas (5%)
+  const bands = [
+    { t: 0.34, c: "#78350f" },
+    { t: 0.45, c: "#09090b" },
+    { t: 0.56, c: "#dc2626" },
+    { t: 0.68, c: "#eab308" }
+  ];
+  bands.forEach(b => {
+    const bp1 = {
+      x: lerp(p1.x, p2.x, b.t - 0.02),
+      y: lerp(p1.y, p2.y, b.t - 0.02),
+      z: lerp(p1.z, p2.z, b.t - 0.02)
+    };
+    const bp2 = {
+      x: lerp(p1.x, p2.x, b.t + 0.02),
+      y: lerp(p1.y, p2.y, b.t + 0.02),
+      z: lerp(p1.z, p2.z, b.t + 0.02)
+    };
+    drawCapsule3D(ctx, cam, bp1, bp2, 9.2, b.c, b.c, b.c);
+  });
+}
+
+// F. Lampu LED 5mm (Kubah Bening + Efek Emissive Glow Putih/Biru Terang)
+function renderLED3D(ctx, cam, pos, brightness = 0) {
+  const { x, y, z } = pos;
+  // Kaki Panjang (+) dan Kaki Pendek (-)
+  drawCapsule3D(ctx, cam, { x: x - 7, y: y + 18, z }, { x: x - 7, y: y - 16, z }, 2.2, "#cbd5e1", "#ffffff", "#64748b");
+  drawCapsule3D(ctx, cam, { x: x + 7, y: y + 18, z }, { x: x + 7, y: y - 8, z }, 2.2, "#cbd5e1", "#ffffff", "#64748b");
+
+  // Kubah LED 5mm
+  const coreCol = brightness > 0.1 ? "#ffffff" : "rgba(224, 242, 254, 0.82)";
+  const edgeCol = brightness > 0.1 ? "#38bdf8" : "rgba(148, 163, 184, 0.65)";
+
+  drawCapsule3D(
+    ctx,
+    cam,
+    { x, y: y + 18, z },
+    { x, y: y + 44, z },
+    14,
+    coreCol,
+    "#ffffff",
+    edgeCol
+  );
+
+  if (brightness > 0.02) {
+    drawSphere3D(
+      ctx,
+      cam,
+      { x, y: y + 34, z },
+      18,
+      "#ffffff",
+      "#38bdf8",
+      "rgba(56, 189, 248, 0.95)",
+      brightness
+    );
+  }
+}
+
+// G. Baterai AA Bekas (Tampilan Sedikit Kusam + Label Voltase 0.85 V)
+function renderBatteryAA3D(ctx, cam, p1, p2, showVoltageLabel = true) {
+  // Bodi Silinder Baterai Kusam
+  drawCapsule3D(ctx, cam, p1, p2, 18, "#475569", "#94a3b8", "#1e293b");
+
+  // Bagian Kepala Kuningan/Tembaga Kusam (+)
+  const brassStart = {
+    x: lerp(p1.x, p2.x, 0.72),
+    y: lerp(p1.y, p2.y, 0.72),
+    z: lerp(p1.z, p2.z, 0.72)
+  };
+  drawCapsule3D(ctx, cam, brassStart, p2, 18.2, "#b45309", "#f59e0b", "#78350f");
+
+  // Tonjolan Kutub Positif (+)
+  const nubEnd = {
+    x: p2.x + (p2.x - p1.x) * 0.08,
+    y: p2.y + (p2.y - p1.y) * 0.08,
+    z: p2.z + (p2.z - p1.z) * 0.08
+  };
+  drawCapsule3D(ctx, cam, p2, nubEnd, 7.5, "#cbd5e1", "#ffffff", "#475569");
+
+  if (showVoltageLabel) {
+    const mid = {
+      x: (p1.x + p2.x) * 0.5,
+      y: (p1.y + p2.y) * 0.5 + 24,
+      z: (p1.z + p2.z) * 0.5
+    };
+    drawFloatingLabel3D(ctx, cam, mid, "Baterai AA Bekas", "Tegangan: 0.85 V", "#f59e0b", 1, { x: 0, y: -38 });
+  }
+}
+
+// ============================================================================
+// 7. RANGKAIAN LENGKAP JOULE THIEF, PENYOLDERAN, & EFEK X-RAY ELEKTRON
+// ============================================================================
+function renderAssembledJouleThief3D(ctx, cam, state) {
+  const {
+    time,
+    assemblyProgress = 1, // 0..1 tahapan perakitan di Adegan 3
+    xrayMode = 0,
+    ledBrightness = 0,
+    cyclePhase = 0,       // 0..1 fase siklus lambat di Adegan 4
+    fastPulse = false
+  } = state;
+
+  // Koordinat Komponen Utama di atas Cutting Mat
+  const toroidPos = { x: 0, y: 18, z: 25 };
+  const transPos = { x: 0, y: 18, z: -55 };
+  const ledPos = { x: 68, y: 18, z: -55 };
+  const resStart = { x: -78, y: 18, z: -5 };
+  const resEnd = { x: -24, y: 18, z: -48 };
+  const batNeg = { x: -155, y: 20, z: -75 };
+  const batPos = { x: -155, y: 20, z: 15 };
+
+  // 1. Toroid & Lilitan Kawat Merah-Biru (Tahap 1: 0.00 - 0.22)
+  const windProg = smoothstep(0.0, 0.22, assemblyProgress);
+  renderToroid3D(ctx, cam, toroidPos, 38, windProg, xrayMode);
+
+  // 2. Pilinan Kawat Merah Awal & Kawat Biru Akhir -> Jalur Positif Baterai (Tahap 2: 0.22 - 0.38)
+  const twistProg = smoothstep(0.22, 0.38, assemblyProgress);
+  if (twistProg > 0) {
+    const twistNode = { x: -58, y: 18, z: 45 };
+    drawCapsule3D(ctx, cam, { x: -35, y: 18, z: 38 }, twistNode, 2.8, "#ef4444", "#fca5a5", "#991b1b");
+    drawCapsule3D(ctx, cam, { x: -32, y: 21, z: 32 }, twistNode, 2.8, "#3b82f6", "#93c5fd", "#1e3a8a");
+
+    // Kabel dari pilinan ke kutub (+) Baterai
+    const targetBatPos = {
+      x: lerp(twistNode.x, batPos.x, twistProg),
+      y: 18,
+      z: lerp(twistNode.z, batPos.z + 8, twistProg)
+    };
+    drawCapsule3D(ctx, cam, twistNode, targetBatPos, 3.0, "#f59e0b", "#fde047", "#b45309");
+
+    if (assemblyProgress > 0.24 && assemblyProgress < 0.92) {
+      drawFloatingLabel3D(ctx, cam, twistNode, "Jalur Baterai (+)", "Merah Awal + Biru Akhir", "#f59e0b", twistProg, { x: -30, y: -48 });
+    }
+  }
+
+  // 3. Kawat Biru Satunya -> Resistor 1k -> Basis Transistor (Tahap 3: 0.38 - 0.56)
+  const baseProg = smoothstep(0.38, 0.56, assemblyProgress);
+  if (baseProg > 0) {
+    drawCapsule3D(ctx, cam, { x: -36, y: 16, z: 12 }, resStart, 2.6, "#3b82f6", "#93c5fd", "#1e3a8a");
+    renderResistor3D(ctx, cam, resStart, resEnd);
+    drawCapsule3D(ctx, cam, resEnd, { x: transPos.x, y: transPos.y + 8, z: transPos.z }, 2.4, "#cbd5e1", "#ffffff", "#64748b");
+  }
+
+  // 4. Transistor 2N2222 & Kawat Merah -> Kolektor (Tahap 4: 0.56 - 0.72)
+  const colProg = smoothstep(0.56, 0.72, assemblyProgress);
+  if (assemblyProgress > 0.35) {
+    const gateOpen = (xrayMode > 0.1 && (fastPulse || (cyclePhase > 0.05 && cyclePhase < 0.58))) ? 1 : 0;
+    renderTransistor3D(ctx, cam, transPos, xrayMode, gateOpen);
+  }
+  if (colProg > 0) {
+    const colPin = { x: transPos.x + 14, y: transPos.y + 8, z: transPos.z };
+    drawCapsule3D(
+      ctx,
+      cam,
+      { x: 38, y: 16, z: 15 },
+      { x: lerp(38, colPin.x, colProg), y: 16, z: lerp(15, colPin.z, colProg) },
+      2.8,
+      "#ef4444",
+      "#fca5a5",
+      "#991b1b"
+    );
+  }
+
+  // 5. Pemasangan LED 5mm & Jalur Negatif Baterai (Tahap 5: 0.72 - 0.88)
+  const ledProg = smoothstep(0.72, 0.88, assemblyProgress);
+  if (ledProg > 0) {
+    renderLED3D(ctx, cam, ledPos, ledBrightness);
+    // Kaki Positif LED ke Kolektor Transistor
+    drawCapsule3D(
+      ctx,
+      cam,
+      { x: transPos.x + 14, y: transPos.y + 6, z: transPos.z },
+      { x: ledPos.x - 7, y: ledPos.y + 6, z: ledPos.z },
+      2.5,
+      "#ef4444",
+      "#fca5a5",
+      "#991b1b"
+    );
+    // Kaki Negatif LED + Emitor Transistor ke Kutub Negatif (-) Baterai
+    drawCapsule3D(
+      ctx,
+      cam,
+      { x: ledPos.x + 7, y: ledPos.y + 4, z: ledPos.z },
+      { x: transPos.x - 14, y: transPos.y + 4, z: transPos.z - 12 },
+      2.5,
+      "#38bdf8",
+      "#bae6fd",
+      "#0369a1"
+    );
+    drawCapsule3D(
+      ctx,
+      cam,
+      { x: transPos.x - 14, y: transPos.y + 4, z: transPos.z - 12 },
+      batNeg,
+      2.8,
+      "#38bdf8",
+      "#bae6fd",
+      "#0369a1"
+    );
+  }
+
+  // Baterai AA Bekas Terpasang
+  if (assemblyProgress > 0.82) {
+    renderBatteryAA3D(ctx, cam, batNeg, batPos, xrayMode < 0.2);
+  }
+
+  // 6. Titik Bulatan Timah Mengkilap & Animasi Solder (Tahap 6: 0.85 - 1.00)
+  const solderJoints = [
+    { x: -58, y: 18, z: 45 },
+    { x: transPos.x - 14, y: transPos.y + 6, z: transPos.z },
+    { x: transPos.x, y: transPos.y + 6, z: transPos.z },
+    { x: transPos.x + 14, y: transPos.y + 6, z: transPos.z },
+    { x: ledPos.x - 7, y: ledPos.y + 6, z: ledPos.z },
+    { x: ledPos.x + 7, y: ledPos.y + 6, z: ledPos.z }
+  ];
+
+  const solderProg = smoothstep(0.84, 0.99, assemblyProgress);
+  if (solderProg > 0) {
+    const activeJointIdx = Math.min(solderJoints.length - 1, Math.floor(solderProg * solderJoints.length));
+    solderJoints.forEach((jt, idx) => {
+      if (idx <= activeJointIdx || assemblyProgress >= 0.99) {
+        drawSphere3D(ctx, cam, jt, 4.2, "#f8fafc", "#64748b");
+      }
+    });
+
+    if (assemblyProgress < 0.995) {
+      const targetJoint = solderJoints[activeJointIdx];
+      renderWorkbenchTools3D(ctx, cam, { x: targetJoint.x, y: targetJoint.y + 4, z: targetJoint.z }, 0.95);
+
+      // Efek kepulan asap tipis saat penyolderan
+      const sp = cam.project(targetJoint.x, targetJoint.y + 18 + (time * 35) % 28, targetJoint.z);
+      if (sp.visible) {
+        ctx.save();
+        ctx.fillStyle = "rgba(226, 232, 240, 0.45)";
+        ctx.beginPath();
+        ctx.arc(sp.x + Math.sin(time * 8) * 8, sp.y, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    } else {
+      renderWorkbenchTools3D(ctx, cam, null, 0.5);
+    }
+  } else {
+    renderWorkbenchTools3D(ctx, cam, null, 0.6);
+  }
+
+  // 7. VISUALISASI X-RAY: PARTIKEL ELEKTRON, MEDAN MAGNET TOROID & LONJAKAN TEGANGAN
+  if (xrayMode > 0.05) {
+    ctx.save();
+    ctx.globalAlpha = clamp(xrayMode, 0, 1);
+
+    const pCycle = fastPulse ? ((time * 6.5) % 1) : cyclePhase;
+
+    // Fase 1 (0.00 - 0.28): Arus kecil lewat resistor ke Basis -> Gerbang transistor terbuka
+    if (pCycle < 0.35 || fastPulse) {
+      for (let i = 0; i < 6; i++) {
+        const t = ((pCycle * 3.2) + i / 6) % 1;
+        const ex = lerp(resStart.x, transPos.x, t);
+        const ez = lerp(resStart.z, transPos.z, t);
+        drawSphere3D(ctx, cam, { x: ex, y: 22, z: ez }, 4.2, "#fde047", "#eab308", "rgba(250, 204, 21, 0.9)", 0.9);
+      }
+    }
+
+    // Fase 2 (0.25 - 0.60): Arus lewat kawat merah ke Kolektor -> Cincin gelombang biru medan magnet membesar
+    if ((pCycle >= 0.22 && pCycle < 0.68) || fastPulse) {
+      const magGrowth = fastPulse ? (0.5 + 0.5 * Math.sin(time * 28)) : smoothstep(0.22, 0.58, pCycle);
+      const tc = cam.project(toroidPos.x, toroidPos.y + 8, toroidPos.z);
+      if (tc.visible) {
+        for (let ring = 1; ring <= 3; ring++) {
+          const rad = (35 + ring * 26 * magGrowth) * tc.scale * 0.55;
+          ctx.strokeStyle = `rgba(56, 189, 248, ${(1 - ring * 0.25) * 0.85})`;
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.ellipse(tc.x, tc.y, rad * 1.25, rad * 0.72, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      // Partikel elektron di jalur kawat merah
+      for (let i = 0; i < 7; i++) {
+        const t = ((time * (fastPulse ? 8 : 2.2)) + i / 7) % 1;
+        const ex = lerp(toroidPos.x + 25, transPos.x + 14, t);
+        const ez = lerp(toroidPos.z, transPos.z, t);
+        drawSphere3D(ctx, cam, { x: ex, y: 22, z: ez }, 4.5, "#fde047", "#f59e0b", "rgba(253, 224, 71, 0.9)", 0.9);
+      }
+    }
+
+    // Fase 3 (0.58 - 0.75): Induksi balik pada kawat biru -> Gerbang Basis tertutup mendadak!
+    if (pCycle >= 0.56 && pCycle < 0.76 && !fastPulse) {
+      drawFloatingLabel3D(
+        ctx,
+        cam,
+        { x: transPos.x, y: transPos.y + 38, z: transPos.z },
+        "Induksi Kawat Biru!",
+        "Gerbang Basis Tertutup Mendadak",
+        "#ef4444",
+        1,
+        { x: 0, y: -45 }
+      );
+    }
+
+    // Fase 4 (0.72 - 1.00): Medan magnet runtuh -> Lonjakan tegangan (Voltage Spike Oranye Terang) ke LED!
+    if (pCycle >= 0.70 || fastPulse) {
+      const collapseT = fastPulse ? ((time * 12) % 1) : smoothstep(0.70, 0.98, pCycle);
+      for (let i = 0; i < 8; i++) {
+        const t = (collapseT + i / 8) % 1;
+        const sx = lerp(toroidPos.x + 28, ledPos.x, t);
+        const sz = lerp(toroidPos.z, ledPos.z, t);
+        drawSphere3D(ctx, cam, { x: sx, y: 26, z: sz }, 6.5, "#ffffff", "#f97316", "rgba(249, 115, 22, 0.98)", 1.0);
+      }
+
+      if (!fastPulse) {
+        drawFloatingLabel3D(
+          ctx,
+          cam,
+          { x: ledPos.x, y: ledPos.y + 48, z: ledPos.z },
+          "LONJAKAN TEGANGAN (> 3.2V)!",
+          "Medan Magnet Runtuh Menyalakan LED",
+          "#f97316",
+          1,
+          { x: 25, y: -52 }
+        );
+      }
+    }
+
+    ctx.restore();
+  }
+}
+
+// ============================================================================
+// 8. OVERLAY HUD EDUKASI, JUDUL ADEGAN & SUBTITLE NARASI
+// ============================================================================
+function renderUIOverlay(ctx, scene, sceneTime, globalTime, totalDuration) {
+  ctx.save();
+
+  // Header Badge Kiri Atas
+  ctx.fillStyle = "rgba(15, 23, 42, 0.82)";
+  ctx.strokeStyle = "#38bdf8";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(36, 32, 460, 58, 12);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = "bold 15px sans-serif";
+  ctx.fillText("EKSPERIMEN FISIKA & ELEKTRONIKA 3D", 56, 54);
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "bold 19px sans-serif";
+  ctx.fillText(scene.name, 56, 78);
+
+  // Indikator Progress Waktu di Kanan Atas
+  const mm = String(Math.floor(globalTime / 60)).padStart(2, '0');
+  const ss = String(Math.floor(globalTime % 60)).padStart(2, '0');
+  const tmm = String(Math.floor(totalDuration / 60)).padStart(2, '0');
+  const tss = String(Math.floor(totalDuration % 60)).padStart(2, '0');
+
+  ctx.fillStyle = "rgba(15, 23, 42, 0.82)";
+  ctx.beginPath();
+  ctx.roundRect(WIDTH - 240, 32, 204, 48, 10);
+  ctx.fill();
+  ctx.fillStyle = "#e2e8f0";
+  ctx.font = "bold 18px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(`${mm}:${ss} / ${tmm}:${tss}`, WIDTH - 138, 62);
+  ctx.textAlign = "left";
+
+  // Subtitle Dinamis Berdasarkan Kalimat Narasi Adegan
+  const sentences = scene.narration.match(/[^.!?]+[.!?]+/g) || [scene.narration];
+  const progress = clamp(sceneTime / scene.duration, 0, 0.999);
+  const idx = Math.min(sentences.length - 1, Math.floor(progress * sentences.length));
+  const currentSentence = sentences[idx].trim();
+
+  ctx.font = "600 24px sans-serif";
+  const maxSubW = WIDTH - 360;
+  const words = currentSentence.split(' ');
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxSubW) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+
+  const subBoxH = lines.length * 34 + 26;
+  const subBoxY = HEIGHT - subBoxH - 28;
+
+  ctx.fillStyle = "rgba(9, 13, 24, 0.84)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.45)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(180, subBoxY, WIDTH - 360, subBoxH, 14);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#f8fafc";
+  ctx.textAlign = "center";
+  lines.forEach((ln, i) => {
+    ctx.fillText(ln, WIDTH * 0.5, subBoxY + 32 + i * 34);
+  });
 
   ctx.restore();
 }
 
 // ============================================================================
-// ILUSTRASI SPESIFIK SETIAP ADEGAN CERITA (FULL MOTION & OBJECTS)
+// 9. SUTRADARA ADEGAN 1 - 5 (KAMERA, ANIMASI KARAKTER & OBJEK 3D)
 // ============================================================================
-
-// ADEGAN 1-3: FISIKA INTI ATOM URANIUM-235, TUMBUKAN NEUTRON & REAKSI BERANTAI
-function drawAtomicPhysicsStage(ctx, sc, localT, globalT, isSpeaking) {
-  const cx = WIDTH * 0.5;
-  const cy = HEIGHT * 0.37;
-
-  // Grid Kuantum Bercahaya di Latar
-  ctx.save();
-  ctx.strokeStyle = "rgba(0, 242, 254, 0.12)";
-  ctx.lineWidth = 1.5;
-  for (let r = 80; r <= 440; r += 75) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, r + Math.sin(globalT * 2 + r) * 4, 0, Math.PI * 2);
-    ctx.stroke();
+function renderMasterFrame(ctx, cam, globalTime, sceneTimings, totalDuration) {
+  let activeScene = sceneTimings[0];
+  for (const st of sceneTimings) {
+    if (globalTime >= st.start && globalTime <= st.end) {
+      activeScene = st;
+      break;
+    }
   }
-  ctx.restore();
+  const sceneTime = clamp(globalTime - activeScene.start, 0, activeScene.duration);
+  const p = clamp(sceneTime / activeScene.duration, 0, 1);
 
-  if (sc.id === "scene_01") {
-    // Visual Perbandingan Energi: 1 Pelet Uranium (Kiri) vs Gunung Batu Bara (Kanan) + Atom Pusat
-    const glowGrad = ctx.createRadialGradient(cx, cy - 30, 10, cx, cy - 30, 260);
-    glowGrad.addColorStop(0, "rgba(0, 242, 254, 0.45)");
-    glowGrad.addColorStop(1, "rgba(0, 242, 254, 0)");
-    ctx.fillStyle = glowGrad;
-    ctx.beginPath();
-    ctx.arc(cx, cy - 30, 260, 0, Math.PI * 2);
-    ctx.fill();
+  // --------------------------------------------------------------------------
+  // ADEGAN 1: Hook & Masalah (00:00 - 00:30)
+  // --------------------------------------------------------------------------
+  if (activeScene.id === 1) {
+    // Kamera Medium Shot Udin lalu zoom-in perlahan ke tangan & baterai AA
+    const zoomT = smoothstep(0.18, 0.85, p);
+    cam.setPose(
+      lerp(0, -35, zoomT),
+      lerp(135, 92, zoomT),
+      lerp(-430, -265, zoomT),
+      lerp(0, -45, zoomT),
+      lerp(85, 38, zoomT),
+      lerp(40, -15, zoomT),
+      720
+    );
 
-    // Orbit 3D Elektron Mengelilingi Inti Uranium
-    for (let o = 0; o < 4; o++) {
-      ctx.save();
-      ctx.translate(cx, cy - 30);
-      ctx.rotate((o * Math.PI) / 4 + globalT * 0.9);
-      ctx.strokeStyle = "rgba(56, 239, 125, 0.7)";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 220, 68, 0, 0, Math.PI * 2);
-      ctx.stroke();
+    renderEnvironment3D(ctx, cam, { darkMode: 0, ledGlow: 0, time: globalTime });
+    renderWorkbenchTools3D(ctx, cam, null, 0.65);
 
-      const elAngle = globalT * 3.8 + o * 1.7;
-      const ex = Math.cos(elAngle) * 220;
-      const ey = Math.sin(elAngle) * 68;
-      ctx.fillStyle = "#00f2fe";
-      ctx.beginPath();
-      ctx.arc(ex, ey, 11, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+    // Ekspresi Udin: Penasaran -> Kecewa (angkat bahu saat LED mati) -> Antusias
+    let expr = "smile";
+    let shrugVal = 0;
+    if (p > 0.28 && p < 0.54) {
+      expr = "surprised";
+      shrugVal = Math.sin(smoothstep(0.28, 0.42, p) * Math.PI);
+    } else if (p >= 0.54 && p < 0.78) {
+      expr = "focused";
     }
 
-    // Inti Atom Uranium Berdenyut
-    for (let n = 0; n < 28; n++) {
-      const a = n * 2.39996 + globalT * 1.2;
-      const rad = Math.sqrt(n) * 10.5;
-      const nx = cx + Math.cos(a) * rad;
-      const ny = cy - 30 + Math.sin(a) * rad;
-      ctx.fillStyle = n % 2 === 0 ? "#ef4444" : "#38bdf8";
-      ctx.beginPath();
-      ctx.arc(nx, ny, 13, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Kartu Komparasi Energi di Bawah Atom
-    ctx.save();
-    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
-    ctx.strokeStyle = "#00f2fe";
-    ctx.lineWidth = 2.5;
-    drawRoundedRect(ctx, 90, cy + 220, 900, 130, 20);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#38ef7d";
-    ctx.font = "bold 34px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("1 PELET URANIUM (7 GRAM)  =  1.000 KG BATU BARA", cx, cy + 278);
-    ctx.fillStyle = "#cbd5e1";
-    ctx.font = "26px sans-serif";
-    ctx.fillText("Densitas Energi 2.000.000x Lipat Bahan Bakar Fosil", cx, cy + 322);
-    ctx.restore();
-
-    // Ilmuwan Dr. Arya menjelaskan sambil memegang bola atom
-    drawArticulatedHuman(ctx, {
-      x: 250,
-      y: 1210,
-      scale: 1.25,
-      role: "scientist",
-      emotion: "excited",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.65,
-      prop: "atom_orb",
-      facing: 1
+    const spinOffset = Math.sin(globalTime * 4.5) * 14;
+    renderUdin3D(ctx, cam, {
+      time: globalTime,
+      udinVisible: 1,
+      expression: expr,
+      speaking: true,
+      shrug: shrugVal,
+      headTilt: shrugVal * 0.12,
+      headYaw: Math.sin(globalTime * 1.4) * 0.25,
+      rightHandPos: { x: -55 + spinOffset * (p < 0.28 ? 1 : 0.2), y: 38, z: -20 },
+      leftHandPos: { x: 45, y: 36, z: -20 },
+      rightHandGesture: "hold",
+      leftHandGesture: p > 0.52 ? "point" : "hold"
     });
-  } else if (sc.id === "scene_02") {
-    // Simulasi Tumbukan Neutron ke Inti U-235 & Terbelah Menjadi Barium + Krypton
-    const cycle = (localT % 6.5) / 6.5;
-    if (cycle < 0.42) {
-      // Fase 1: Neutron meluncur cepat menumbuk U-235
-      const p = easeInOutCubic(cycle / 0.42);
-      const neutronX = lerp(80, cx - 55, p);
 
-      // Jejak Neutron
-      ctx.strokeStyle = "#facc15";
-      ctx.lineWidth = 8;
-      ctx.beginPath();
-      ctx.moveTo(neutronX - 95, cy);
-      ctx.lineTo(neutronX, cy);
-      ctx.stroke();
+    // Baterai AA Bekas di meja / tangan Udin
+    const batP1 = { x: -75, y: 20, z: -20 };
+    const batP2 = { x: -15, y: 20, z: -20 };
+    renderBatteryAA3D(ctx, cam, batP1, batP2, p > 0.35);
 
-      ctx.fillStyle = "#fef08a";
-      ctx.beginPath();
-      ctx.arc(neutronX, cy, 20, 0, Math.PI * 2);
-      ctx.fill();
+    // Uji tempel LED langsung ke baterai (LED tidak menyala)
+    if (p > 0.22 && p < 0.55) {
+      renderLED3D(ctx, cam, { x: -45, y: 28, z: -20 }, 0);
+      drawFloatingLabel3D(ctx, cam, { x: -45, y: 65, z: -20 }, "LED 3V Tidak Menyala!", "Tegangan Kurang (< 3.0 V)", "#ef4444", 1);
+    }
 
-      // Label Neutron
-      ctx.fillStyle = "#fef08a";
-      ctx.font = "bold 28px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("NEUTRON BEBAS (n⁰)", neutronX, cy - 38);
+    // Multitester Digital mengukur baterai -> menampilkan 0.85 V
+    const probing = p >= 0.38;
+    const lcdVal = p < 0.42 ? "0.00 V" : "0.85 V";
+    renderMultimeter3D(ctx, cam, { x: -175, y: 4, z: 35 }, lcdVal, probing, { x: -45, y: 20, z: -20 });
+  }
 
-      // Inti U-235 Bergetar
-      const shake = p > 0.8 ? (p - 0.8) * 55 : 4;
-      for (let k = 0; k < 36; k++) {
-        const ang = k * 2.4 + globalT * 2;
-        const r = Math.sqrt(k) * 14;
-        const px = cx + Math.cos(ang) * r + Math.sin(globalT * 40 + k) * shake;
-        const py = cy + Math.sin(ang) * r + Math.cos(globalT * 40 + k) * shake;
-        ctx.fillStyle = k % 2 === 0 ? "#f43f5e" : "#0ea5e9";
-        ctx.beginPath();
-        ctx.arc(px, py, 16, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 36px sans-serif";
-      ctx.fillText("INTI URANIUM-235 (92p + 143n)", cx, cy + 155);
-    } else {
-      // Fase 2: Fisi Nuklir! Terbelah menjadi Ba-141 & Kr-92 + Kilatan Energi + 3 Neutron Baru
-      const splitP = easeInOutCubic((cycle - 0.42) / 0.58);
-      const sep = splitP * 240;
+  // --------------------------------------------------------------------------
+  // ADEGAN 2: Pengenalan Bahan (00:30 - 00:58)
+  // --------------------------------------------------------------------------
+  else if (activeScene.id === 2) {
+    // Transisi kamera menyapu ke atas menjadi Top-Down View menghadap cutting mat hijau
+    const topT = easeInOutCubic(smoothstep(0.0, 0.18, p));
+    cam.setPose(
+      0,
+      lerp(135, 390, topT),
+      lerp(-380, -95, topT),
+      0,
+      lerp(75, 10, topT),
+      lerp(20, 0, topT),
+      740
+    );
 
-      // Gelombang Kejut Energi Fisi
-      ctx.strokeStyle = `rgba(250, 204, 21, ${(1 - splitP).toFixed(3)})`;
-      ctx.lineWidth = 14 * (1 - splitP);
-      ctx.beginPath();
-      ctx.arc(cx, cy, 40 + splitP * 380, 0, Math.PI * 2);
-      ctx.stroke();
+    renderEnvironment3D(ctx, cam, { darkMode: 0, ledGlow: 0, time: globalTime });
+    renderWorkbenchTools3D(ctx, cam, null, 0.5);
 
-      // Dua Inti Hasil Belahan (Barium-141 & Krypton-92)
-      const drawCluster = (bx, by, label, count) => {
-        for (let k = 0; k < count; k++) {
-          const ang = k * 2.4 + globalT * 3;
-          const r = Math.sqrt(k) * 12;
-          ctx.fillStyle = k % 2 === 0 ? "#ef4444" : "#38bdf8";
-          ctx.beginPath();
-          ctx.arc(bx + Math.cos(ang) * r, by + Math.sin(ang) * r, 14, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.fillStyle = "#f8fafc";
-        ctx.font = "bold 30px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(label, bx, by + 105);
-      };
-
-      drawCluster(cx - sep, cy - sep * 0.35, "BARIUM-141", 18);
-      drawCluster(cx + sep, cy + sep * 0.35, "KRYPTON-92", 14);
-
-      // 3 Neutron Baru Terlontar
-      const angles = [-0.6, 0.1, 0.75];
-      angles.forEach((ang, idx) => {
-        const nr = splitP * 340;
-        const nx = cx + Math.cos(ang) * nr;
-        const ny = cy + Math.sin(ang) * nr;
-        ctx.fillStyle = "#fde047";
-        ctx.beginPath();
-        ctx.arc(nx, ny, 15, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#fde047";
-        ctx.font = "bold 24px sans-serif";
-        ctx.fillText(`n⁰ #${idx + 1}`, nx, ny - 24);
+    // Tangan Udin menyingkir perlahan
+    if (topT < 0.85) {
+      renderUdin3D(ctx, cam, {
+        time: globalTime,
+        udinVisible: 1 - topT,
+        expression: "smile",
+        speaking: true,
+        rightHandPos: { x: -180, y: 40, z: 60 },
+        leftHandPos: { x: 180, y: 40, z: 60 }
       });
     }
 
-    drawArticulatedHuman(ctx, {
-      x: 230,
-      y: 1220,
-      scale: 1.22,
-      role: "scientist",
-      emotion: "normal",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.8,
-      prop: "pointer",
-      facing: 1
-    });
-  } else {
-    // Scene 03: Pohon Reaksi Berantai Eksponensial (1 -> 3 -> 9 -> 27) & Rumus E = mc^2
-    const levels = 4;
-    const treeTopY = 390;
-    const levelH = 145;
-    const animWave = (localT % 4.5) / 4.5;
+    // 6 Komponen muncul satu per satu dengan efek membal (elastic pop-up)
+    const pop = (startP) => easeOutBack(smoothstep(startP, startP + 0.11, p));
 
-    for (let lv = 0; lv < levels; lv++) {
-      const count = Math.pow(2, lv);
-      const yPos = treeTopY + lv * levelH;
-      const spreadW = 760;
-
-      for (let idx = 0; idx < count; idx++) {
-        const xPos = cx - spreadW / 2 + ((idx + 0.5) / count) * spreadW;
-
-        if (lv < levels - 1) {
-          const nextCount = Math.pow(2, lv + 1);
-          const child1X = cx - spreadW / 2 + ((idx * 2 + 0.5) / nextCount) * spreadW;
-          const child2X = cx - spreadW / 2 + ((idx * 2 + 1.5) / nextCount) * spreadW;
-          const nextY = treeTopY + (lv + 1) * levelH;
-
-          ctx.strokeStyle = "rgba(247, 151, 30, 0.65)";
-          ctx.lineWidth = 4;
-          ctx.beginPath();
-          ctx.moveTo(xPos, yPos);
-          ctx.lineTo(child1X, nextY);
-          ctx.moveTo(xPos, yPos);
-          ctx.lineTo(child2X, nextY);
-          ctx.stroke();
-
-          // Partikel neutron mengalir di sepanjang garis cabang
-          const pT = (animWave * 3 - lv * 0.4 + 3) % 1;
-          ctx.fillStyle = "#fef08a";
-          ctx.beginPath();
-          ctx.arc(lerp(xPos, child1X, pT), lerp(yPos, nextY, pT), 8, 0, Math.PI * 2);
-          ctx.arc(lerp(xPos, child2X, pT), lerp(yPos, nextY, pT), 8, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Simpul Inti Uranium
-        const pulse = 1 + 0.2 * Math.sin(globalT * 6 - lv);
-        ctx.fillStyle = lv === levels - 1 ? "#ef4444" : "#f59e0b";
-        ctx.beginPath();
-        ctx.arc(xPos, yPos, 22 * pulse, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    // 1. Inti Ferit Toroid
+    const s1 = pop(0.10);
+    if (s1 > 0.01) {
+      const yOff = (1 - s1) * -80;
+      renderToroid3D(ctx, cam, { x: -200, y: 18 + yOff, z: 55 }, 32 * clamp(s1, 0.2, 1.2), 0, 0);
+      drawFloatingLabel3D(ctx, cam, { x: -200, y: 42, z: 55 }, "1. Inti Ferit (Toroid)", "Donat Ferit Hitam", "#38bdf8", clamp(s1, 0, 1));
     }
 
-    // Banner Hologram E = mc²
-    ctx.save();
-    ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
-    ctx.strokeStyle = "#f59e0b";
-    ctx.lineWidth = 3;
-    drawRoundedRect(ctx, 220, 915, 640, 120, 24);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#fde047";
-    ctx.font = "bold 64px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("E = m · c²", cx, 995);
-    ctx.restore();
+    // 2. Kawat Tembaga Bifilar (Merah & Biru)
+    const s2 = pop(0.24);
+    if (s2 > 0.01) {
+      const yOff = (1 - s2) * -80;
+      drawCapsule3D(ctx, cam, { x: -45, y: 16 + yOff, z: 75 }, { x: 45, y: 16 + yOff, z: 75 }, 3.5, "#ef4444", "#fca5a5", "#991b1b");
+      drawCapsule3D(ctx, cam, { x: -45, y: 16 + yOff, z: 45 }, { x: 45, y: 16 + yOff, z: 45 }, 3.5, "#3b82f6", "#93c5fd", "#1e3a8a");
+      drawFloatingLabel3D(ctx, cam, { x: 0, y: 38, z: 60 }, "2. Kawat Tembaga (Bifilar)", "Merah & Biru", "#f43f5e", clamp(s2, 0, 1));
+    }
 
-    drawArticulatedHuman(ctx, {
-      x: 820,
-      y: 1220,
-      scale: 1.22,
-      role: "scientist",
-      emotion: "excited",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.75,
-      prop: "pointer",
-      facing: -1
-    });
+    // 3. Transistor NPN 2N2222
+    const s3 = pop(0.40);
+    if (s3 > 0.01) {
+      const yOff = (1 - s3) * -80;
+      renderTransistor3D(ctx, cam, { x: 195, y: 18 + yOff, z: 55 }, 0, 0);
+      drawFloatingLabel3D(ctx, cam, { x: 195, y: 55, z: 55 }, "3. Transistor NPN 2N2222", "Emitor | Basis | Kolektor", "#a855f7", clamp(s3, 0, 1));
+    }
+
+    // 4. Resistor 1k Ohm
+    const s4 = pop(0.55);
+    if (s4 > 0.01) {
+      const yOff = (1 - s4) * -80;
+      renderResistor3D(ctx, cam, { x: -235, y: 18 + yOff, z: -55 }, { x: -155, y: 18 + yOff, z: -55 });
+      drawFloatingLabel3D(ctx, cam, { x: -195, y: 38, z: -55 }, "4. Resistor 1k Ohm", "Cokelat-Hitam-Merah-Emas", "#eab308", clamp(s4, 0, 1));
+    }
+
+    // 5. Lampu LED 5mm 3V
+    const s5 = pop(0.70);
+    if (s5 > 0.01) {
+      const yOff = (1 - s5) * -80;
+      renderLED3D(ctx, cam, { x: 0, y: 18 + yOff, z: -55 }, 0.25);
+      drawFloatingLabel3D(ctx, cam, { x: 0, y: 58, z: -55 }, "5. LED 5mm (3 Volt)", "Kubah Bening Emissive", "#22c55e", clamp(s5, 0, 1));
+    }
+
+    // 6. Baterai AA Bekas (0.85 V)
+    const s6 = pop(0.83);
+    if (s6 > 0.01) {
+      const yOff = (1 - s6) * -80;
+      renderBatteryAA3D(ctx, cam, { x: 155, y: 20 + yOff, z: -55 }, { x: 235, y: 20 + yOff, z: -55 }, true);
+    }
   }
-}
 
-// ADEGAN 4-5: CARA KERJA PLTN (TERAS REAKTOR, BATANG KENDALI, TURBIN UAP, MENARA PENDINGIN)
-function drawNuclearPlantStage(ctx, sc, localT, globalT, isSpeaking) {
-  if (sc.id === "scene_04") {
-    // Bejana Reaktor Terbuka dengan Batang Bahan Bakar & Batang Kendali Boron Naik-Turun
-    const rx = 280;
-    const ry = 370;
-    const rw = 520;
-    const rh = 560;
-
-    // Bejana Tekan Baja
-    ctx.fillStyle = "#1e293b";
-    ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 6;
-    drawRoundedRect(ctx, rx, ry, rw, rh, 48);
-    ctx.fill();
-    ctx.stroke();
-
-    // Air Pendingin Berpendar Cherenkov Biru
-    const rodInsertion = 0.5 + 0.38 * Math.sin(globalT * 1.1); // 0 = cabut, 1 = masuk penuh
-    const reactivity = 1 - rodInsertion;
-    const waterGrad = ctx.createLinearGradient(rx, ry + 80, rx, ry + rh);
-    waterGrad.addColorStop(0, `rgba(0, 210, 255, ${(0.25 + reactivity * 0.45).toFixed(3)})`);
-    waterGrad.addColorStop(1, `rgba(255, 81, 47, ${(0.15 + reactivity * 0.55).toFixed(3)})`);
-    ctx.fillStyle = waterGrad;
-    drawRoundedRect(ctx, rx + 20, ry + 90, rw - 40, rh - 110, 32);
-    ctx.fill();
-
-    // 5 Batang Bahan Bakar Uranium-235 (Tetap)
-    for (let i = 0; i < 5; i++) {
-      const fx = rx + 65 + i * 95;
-      ctx.fillStyle = "#f97316";
-      drawRoundedRect(ctx, fx - 14, ry + 160, 28, 330, 8);
-      ctx.fill();
-      ctx.fillStyle = "#fef08a";
-      ctx.font = "bold 18px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("U-235", fx, ry + 518);
-    }
-
-    // 4 Batang Kendali Boron (Bergerak Naik-Turun Secara Dinamis)
-    const rodY = ry + 30 + rodInsertion * 180;
-    for (let i = 0; i < 4; i++) {
-      const cxRod = rx + 112 + i * 95;
-      ctx.fillStyle = "#94a3b8";
-      ctx.fillRect(cxRod - 4, ry - 45, 8, rodY - (ry - 45));
-      ctx.fillStyle = "#0f172a";
-      ctx.strokeStyle = "#38ef7d";
-      ctx.lineWidth = 3;
-      drawRoundedRect(ctx, cxRod - 16, rodY, 32, 260, 6);
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    // Panel Status Reaktivitas
-    ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
-    drawRoundedRect(ctx, 140, 960, 800, 105, 18);
-    ctx.fill();
-    ctx.fillStyle = "#38ef7d";
-    ctx.font = "bold 30px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(
-      `POSISI BATANG KENDALI BORON: ${Math.round(rodInsertion * 100)}%  |  SUHU TERAS: ${Math.round(280 + reactivity * 320)}°C`,
-      WIDTH / 2,
-      1022
+  // --------------------------------------------------------------------------
+  // ADEGAN 3: Proses Perakitan 3D (00:58 - 01:56)
+  // --------------------------------------------------------------------------
+  else if (activeScene.id === 3) {
+    // Kamera Close-up Dinamis mengorbit halus mengikuti perakitan presisi
+    const orbitAngle = (p - 0.5) * 0.55;
+    cam.setPose(
+      Math.sin(orbitAngle) * 230,
+      lerp(185, 145, Math.sin(p * Math.PI)),
+      -Math.cos(orbitAngle) * 245,
+      0,
+      24,
+      -15,
+      760
     );
 
-    drawArticulatedHuman(ctx, {
-      x: 210,
-      y: 1230,
-      scale: 1.2,
-      role: "scientist",
-      emotion: "normal",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.7,
-      prop: "pointer",
-      facing: 1
-    });
-  } else {
-    // Scene 05: Diagram Lengkap Siklus Uap PLTN -> Turbin -> Generator -> Menara Pendingin & Kota
-    // 1. Reaktor (Kiri)
-    ctx.fillStyle = "#1e293b";
-    ctx.strokeStyle = "#f97316";
-    ctx.lineWidth = 4;
-    drawRoundedRect(ctx, 80, 460, 190, 270, 24);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#fb923c";
-    ctx.font = "bold 24px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("REAKTOR", 175, 600);
+    renderEnvironment3D(ctx, cam, { darkMode: 0, ledGlow: 0, time: globalTime });
 
-    // Pipa Uap Panas (Merah) menuju Turbin
-    ctx.strokeStyle = "#ef4444";
-    ctx.lineWidth = 14;
-    ctx.beginPath();
-    ctx.moveTo(270, 510);
-    ctx.lineTo(520, 510);
-    ctx.stroke();
-
-    // Partikel uap mengalir
-    for (let p = 0; p < 6; p++) {
-      const px = 280 + (((globalT * 140 + p * 42) % 230));
-      ctx.fillStyle = "#fde047";
-      ctx.beginPath();
-      ctx.arc(px, 510, 6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 2. Turbin Raksasa Berputar (Tengah)
-    const tx = 540;
-    const ty = 510;
-    ctx.save();
-    ctx.translate(tx, ty);
-    ctx.fillStyle = "#0f172a";
-    ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(0, 0, 92, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Bilah Turbin Berputar 60 FPS
-    ctx.rotate(globalT * 8.5);
-    for (let b = 0; b < 8; b++) {
-      ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = "#38bdf8";
-      drawRoundedRect(ctx, -8, -82, 16, 70, 5);
-      ctx.fill();
-    }
-    ctx.restore();
-    ctx.fillStyle = "#f8fafc";
-    ctx.font = "bold 24px sans-serif";
-    ctx.fillText("TURBIN & GENERATOR", tx, ty + 132);
-
-    // 3. Menara Pendingin Hyperbolic (Kanan)
-    ctx.save();
-    ctx.fillStyle = "#475569";
-    ctx.strokeStyle = "#94a3b8";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(760, 740);
-    ctx.quadraticCurveTo(805, 580, 785, 450);
-    ctx.lineTo(935, 450);
-    ctx.quadraticCurveTo(915, 580, 960, 740);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Kepulan Uap Air Bersih dari Menara Pendingin
-    for (let s = 0; s < 5; s++) {
-      const sy = 430 - ((globalT * 45 + s * 32) % 150);
-      const sr = 24 + ((430 - sy) * 0.25);
-      ctx.fillStyle = `rgba(241, 245, 249, ${(0.55 - (430 - sy) / 300).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(860 + Math.sin(globalT * 2 + s) * 18, sy, sr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // 4. Siluet Gedung Kota Menyala Terang oleh Listrik Bersih
-    const cityY = 820;
-    const buildings = [
-      { x: 110, w: 95, h: 170 },
-      { x: 220, w: 115, h: 220 },
-      { x: 350, w: 90, h: 150 },
-      { x: 460, w: 130, h: 210 },
-      { x: 610, w: 105, h: 180 }
-    ];
-    buildings.forEach((b, bi) => {
-      ctx.fillStyle = "#0f172a";
-      ctx.strokeStyle = "#00f2fe";
-      ctx.lineWidth = 2;
-      ctx.fillRect(b.x, cityY + (220 - b.h), b.w, b.h);
-      ctx.strokeRect(b.x, cityY + (220 - b.h), b.w, b.h);
-
-      // Jendela gedung menyala
-      ctx.fillStyle = "#fde047";
-      for (let wy = cityY + (240 - b.h); wy < cityY + 200; wy += 28) {
-        for (let wx = b.x + 14; wx < b.x + b.w - 18; wx += 24) {
-          if ((wx + wy + bi) % 3 !== 0) {
-            ctx.fillRect(wx, wy, 12, 16);
-          }
-        }
-      }
+    // Udin tampak fokus di latar belakang memperhatikan proses rakitan & menyolder
+    renderUdin3D(ctx, cam, {
+      time: globalTime,
+      udinVisible: 0.92,
+      expression: "focused",
+      speaking: true,
+      headYaw: Math.sin(p * Math.PI * 2) * 0.18,
+      rightHandPos: { x: -165, y: 34, z: 75 },
+      leftHandPos: { x: 165, y: 34, z: 75 },
+      rightHandGesture: "point",
+      leftHandGesture: "open"
     });
 
-    drawArticulatedHuman(ctx, {
-      x: 830,
-      y: 1230,
-      scale: 1.2,
-      role: "scientist",
-      emotion: "excited",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.6,
-      prop: "clipboard",
-      facing: -1
+    renderAssembledJouleThief3D(ctx, cam, {
+      time: globalTime,
+      assemblyProgress: p,
+      xrayMode: 0,
+      ledBrightness: 0,
+      cyclePhase: 0,
+      fastPulse: false
     });
+
+    // Label Kaki Transistor saat disambungkan
+    if (p > 0.42 && p < 0.85) {
+      drawFloatingLabel3D(ctx, cam, { x: 0, y: 52, z: -55 }, "Transistor 2N2222", "Kiri: Emitor | Tengah: Basis | Kanan: Kolektor", "#38bdf8", 1, { x: 40, y: -55 });
+    }
   }
-}
 
-// ADEGAN 6-10: KRONOLOGI PENYEBAB CHERNOBYL (RUANG KONTROL, XENON-135, KOEFISIEN RONGGA, AZ-5, LEDAKAN!)
-function drawChernobylDisasterStage(ctx, sc, localT, globalT, isSpeaking) {
-  const cx = WIDTH / 2;
+  // --------------------------------------------------------------------------
+  // ADEGAN 4: Uji Coba Mode Gelap & Cara Kerja X-Ray (01:56 - 03:00)
+  // --------------------------------------------------------------------------
+  else if (activeScene.id === 4) {
+    // Fase di Adegan 4:
+    // 0.00 - 0.10: Udin menekan sakelar lampu meja -> Ruangan berubah gelap
+    // 0.10 - 0.22: Baterai dipasang -> BLAR! LED menyala putih terang menyinari wajah Udin
+    // 0.22 - 0.82: Kamera zoom mikroskopis X-Ray (Slow-Mo siklus induksi & lonjakan tegangan)
+    // 0.82 - 1.00: Kecepatan normal (ribuan denyutan per detik -> LED menyala stabil)
 
-  if (sc.id === "scene_06" || sc.id === "scene_07" || sc.id === "scene_09") {
-    // Ruang Kontrol Reaktor Nomor 4 Chernobyl & Panel RBMK-1000
-    ctx.fillStyle = "#1e293b";
-    ctx.strokeStyle = sc.id === "scene_09" ? "#ef4444" : "#64748b";
-    ctx.lineWidth = 5;
-    drawRoundedRect(ctx, 70, 360, 940, 480, 24);
-    ctx.fill();
-    ctx.stroke();
+    const darkT = smoothstep(0.04, 0.12, p);
+    const ledOnT = smoothstep(0.11, 0.16, p);
+    const xrayT = smoothstep(0.22, 0.30, p) * (1 - smoothstep(0.90, 0.98, p));
+    const isFast = p >= 0.82;
 
-    // Peta Indikator Bundar Teras RBMK (Selsyn Dial Map di Dinding Ruang Kontrol)
-    const mapX = 310;
-    const mapY = 585;
-    ctx.fillStyle = "#0f172a";
-    ctx.beginPath();
-    ctx.arc(mapX, mapY, 155, 0, Math.PI * 2);
-    ctx.fill();
-
-    for (let gx = -4; gx <= 4; gx++) {
-      for (let gy = -4; gy <= 4; gy++) {
-        if (gx * gx + gy * gy <= 18) {
-          const cellX = mapX + gx * 28;
-          const cellY = mapY + gy * 28;
-          const isHot =
-            sc.id === "scene_09"
-              ? Math.sin(globalT * 18 + gx * gy) > -0.2
-              : sc.id === "scene_07"
-              ? (gx + gy) % 4 === 0
-              : true;
-          ctx.fillStyle =
-            sc.id === "scene_09"
-              ? isHot
-                ? "#ef4444"
-                : "#f97316"
-              : sc.id === "scene_07"
-              ? isHot
-                ? "#a855f7"
-                : "#1e293b"
-              : "#38bdf8";
-          ctx.fillRect(cellX - 10, cellY - 10, 20, 20);
-        }
-      }
-    }
-
-    // Meteran Daya Termal Reaktor (MW) & Racun Xenon-135
-    let displayedMw = sc.powerMw;
-    if (sc.id === "scene_09") {
-      const surge = easeInOutCubic(clamp((localT - 3.0) / 12.0, 0, 1));
-      displayedMw = Math.round(200 + surge * 32800);
-    }
-
-    ctx.fillStyle = "#090d16";
-    drawRoundedRect(ctx, 520, 410, 440, 180, 16);
-    ctx.fill();
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "bold 24px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("DAYA TERMAL REAKTOR UNIT 4", 740, 452);
-
-    ctx.fillStyle = sc.id === "scene_09" ? "#ef4444" : sc.id === "scene_07" ? "#f97316" : "#38ef7d";
-    ctx.font = "bold 66px monospace";
-    ctx.fillText(`${displayedMw.toLocaleString("id-ID")} MW`, 740, 535);
-
-    if (sc.id === "scene_07") {
-      // Visualisasi Akumulasi Gas Racun Xenon-135 (Ungu)
-      ctx.fillStyle = "rgba(88, 28, 135, 0.85)";
-      drawRoundedRect(ctx, 520, 620, 440, 180, 16);
-      ctx.fill();
-      ctx.fillStyle = "#e9d5ff";
-      ctx.font = "bold 28px sans-serif";
-      ctx.fillText("AKUMULASI RACUN XENON-135", 740, 672);
-      ctx.font = "23px sans-serif";
-      ctx.fillText("Menyerap Neutron & Mencekik Teras!", 740, 718);
-    } else if (sc.id === "scene_09") {
-      // Tombol Darurat AZ-5 (SCRAM) Ditekan & Ilustrasi Ujung Grafit
-      const isPressed = localT > 2.2;
-      ctx.fillStyle = "#1e293b";
-      drawRoundedRect(ctx, 520, 620, 440, 190, 16);
-      ctx.fill();
-
-      // Tombol Merah AZ-5
-      ctx.fillStyle = isPressed ? "#ff0000" : "#7f1d1d";
-      ctx.beginPath();
-      ctx.arc(610, 715, isPressed ? 44 : 48, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 28px sans-serif";
-      ctx.fillText("AZ-5", 610, 725);
-
-      ctx.fillStyle = "#fca5a5";
-      ctx.font = "bold 25px sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText("UJUNG GRAFIT TURUN:", 680, 690);
-      ctx.fillStyle = "#fde047";
-      ctx.font = "bold 23px sans-serif";
-      ctx.fillText("Memicu Lonjakan 100x!", 680, 735);
-    } else {
-      // Scene 06: Status Tes Keamanan Turbin RBMK-1000
-      ctx.fillStyle = "#0f172a";
-      drawRoundedRect(ctx, 520, 620, 440, 180, 16);
-      ctx.fill();
-      ctx.fillStyle = "#38bdf8";
-      ctx.font = "bold 26px sans-serif";
-      ctx.fillText("JADWAL UJI COBA TURBIN", 740, 680);
-      ctx.fillStyle = "#cbd5e1";
-      ctx.font = "23px sans-serif";
-      ctx.fillText("Tertunda 10 Jam -> Kru Malam Masuk", 740, 728);
-    }
-
-    // Dua Karakter Operator Chernobyl (Akimov & Toptunov) + Narator
-    drawArticulatedHuman(ctx, {
-      x: 260,
-      y: 1230,
-      scale: 1.15,
-      role: "operator",
-      emotion: sc.id === "scene_09" ? "panicked" : "shocked",
-      isSpeaking: false,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.9,
-      prop: "none",
-      facing: 1
-    });
-
-    drawArticulatedHuman(ctx, {
-      x: 790,
-      y: 1230,
-      scale: 1.2,
-      role: "scientist",
-      emotion: sc.id === "scene_09" ? "shocked" : "somber",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.65,
-      prop: "pointer",
-      facing: -1
-    });
-  } else if (sc.id === "scene_08") {
-    // Scene 08: Ilustrasi Teknis Koefisien Rongga Positif (Positive Void Coefficient) & Ujung Grafit
-    const boxX = 120;
-    const boxY = 370;
-    const boxW = 840;
-    const boxH = 620;
-
-    ctx.fillStyle = "#0f172a";
-    ctx.strokeStyle = "#f43f5e";
-    ctx.lineWidth = 4;
-    drawRoundedRect(ctx, boxX, boxY, boxW, boxH, 28);
-    ctx.fill();
-    ctx.stroke();
-
-    // 3 Saluran Pipa Bahan Bakar RBMK dengan Blok Moderator Grafit di Kiri-Kanan
-    for (let c = 0; c < 3; c++) {
-      const chX = 260 + c * 280;
-
-      // Blok Moderator Grafit Abu-Abu Gelap
-      ctx.fillStyle = "#334155";
-      ctx.fillRect(chX - 110, boxY + 70, 55, 480);
-      ctx.fillRect(chX + 55, boxY + 70, 55, 480);
-
-      // Saluran Air Mendidih
-      ctx.fillStyle = "rgba(14, 165, 233, 0.35)";
-      ctx.fillRect(chX - 50, boxY + 70, 100, 480);
-
-      // Gelembung Uap (Void Bubbles) Naik Cepat
-      for (let b = 0; b < 9; b++) {
-        const by = boxY + 530 - ((globalT * 160 + b * 55 + c * 30) % 450);
-        const bx = chX + Math.sin(globalT * 5 + b) * 22;
-        ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
-        ctx.beginPath();
-        ctx.arc(bx, by, 14 + (b % 3) * 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Batang Kendali Dicabut ke Atas + Ujung Displacer Grafit di Bawahnya
-      const rodTop = boxY + 95;
-      ctx.fillStyle = "#10b981"; // Bagian penyerap Boron (di atas luar teras!)
-      ctx.fillRect(chX - 16, rodTop, 32, 95);
-      ctx.fillStyle = "#f59e0b"; // Ujung Displacer Grafit!
-      ctx.fillRect(chX - 16, rodTop + 125, 32, 110);
-    }
-
-    ctx.fillStyle = "#fde047";
-    ctx.font = "bold 28px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("GELEMBUNG UAP NAIK -> DAYA NAIK -> MAKIN BANYAK UAP!", cx, boxY + 585);
-
-    drawArticulatedHuman(ctx, {
-      x: 240,
-      y: 1230,
-      scale: 1.2,
-      role: "scientist",
-      emotion: "shocked",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.8,
-      prop: "pointer",
-      facing: 1
-    });
-  } else {
-    // Scene 10: PUKUL 01:23:45 — LEDAKAN REAKTOR NOMOR 4 CHERNOBYL & SINAR BIRU IONISASI
-    const groundY = 930;
-
-    // Pancaran Sinar Biru Ionisasi Udara (Cherenkov / Ionized Air Glow) Menembus Langit
-    const beamGrad = ctx.createLinearGradient(cx - 140, groundY - 260, cx + 140, 120);
-    beamGrad.addColorStop(0, "rgba(0, 242, 254, 0.85)");
-    beamGrad.addColorStop(0.5, "rgba(56, 189, 248, 0.35)");
-    beamGrad.addColorStop(1, "rgba(0, 242, 254, 0)");
-    ctx.fillStyle = beamGrad;
-    ctx.beginPath();
-    ctx.moveTo(cx - 95, groundY - 220);
-    ctx.lineTo(cx - 240, 180);
-    ctx.lineTo(cx + 240, 180);
-    ctx.lineTo(cx + 95, groundY - 220);
-    ctx.closePath();
-    ctx.fill();
-
-    // Bola Api & Kepulan Asap Grafit Radioaktif
-    for (let f = 0; f < 14; f++) {
-      const age = (globalT * 0.8 + f * 0.22) % 2.4;
-      const fy = groundY - 210 - age * 210;
-      const fx = cx + Math.sin(f * 3.1 + globalT * 2) * (40 + age * 65);
-      const fr = 48 + age * 45;
-      ctx.fillStyle =
-        age < 0.7
-          ? `rgba(255, 200, 30, ${(0.85 - age * 0.5).toFixed(3)})`
-          : age < 1.4
-          ? `rgba(239, 68, 68, ${(0.7 - (age - 0.7) * 0.5).toFixed(3)})`
-          : `rgba(30, 41, 59, ${(0.75 - (age - 1.4) * 0.6).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(fx, fy, fr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Gedung Reaktor Nomor 4 yang Hancur Terkoyak + Cerobong Vent Stack Ikonik
-    ctx.fillStyle = "#334155";
-    ctx.fillRect(160, groundY - 240, 760, 240);
-
-    // Reruntuhan Atap & Tutup Biologis "Elena" (2.000 Ton) yang Miring
-    ctx.save();
-    ctx.translate(cx, groundY - 230);
-    ctx.rotate(-0.42);
-    ctx.fillStyle = "#64748b";
-    ctx.strokeStyle = "#f97316";
-    ctx.lineWidth = 4;
-    ctx.fillRect(-115, -24, 230, 48);
-    ctx.strokeRect(-115, -24, 230, 48);
-    ctx.restore();
-
-    // Cerobong Merah-Putih Chernobyl di atas gedung
-    const chX = cx + 180;
-    for (let seg = 0; seg < 6; seg++) {
-      ctx.fillStyle = seg % 2 === 0 ? "#dc2626" : "#f8fafc";
-      ctx.fillRect(chX - 18, groundY - 240 - (seg + 1) * 42, 36, 42);
-    }
-
-    drawArticulatedHuman(ctx, {
-      x: 220,
-      y: 1230,
-      scale: 1.2,
-      role: "operator",
-      emotion: "panicked",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.8,
-      prop: "none",
-      facing: 1
-    });
-  }
-}
-
-// ADEGAN 11-15: DAMPAK CHERNOBYL, PEMADAM, LIKUIDATOR, PRIPYAT, DAN NEW SAFE CONFINEMENT
-function drawAftermathAndFutureStage(ctx, sc, localT, globalT, isSpeaking) {
-  const cx = WIDTH / 2;
-
-  if (sc.id === "scene_11") {
-    // Scene 11: Pemadam Kebakaran Heroik & Untaian Heliks Ganda DNA yang Terputus oleh Sinar Gamma
-    const dnaX = 680;
-    const dnaTop = 390;
-    const dnaH = 520;
-
-    // Gelombang Sinar Gamma Menembus DNA
-    for (let g = 0; g < 5; g++) {
-      const gy = dnaTop + 70 + g * 95;
-      ctx.strokeStyle = "#facc15";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      for (let wx = 120; wx < dnaX - 40; wx += 12) {
-        const wy = gy + Math.sin(wx * 0.18 - globalT * 16) * 14;
-        if (wx === 120) ctx.moveTo(wx, wy);
-        else ctx.lineTo(wx, wy);
-      }
-      ctx.stroke();
-    }
-
-    // Heliks Ganda DNA dengan Ikatan yang Patah Akibat Radiasi Pengion
-    for (let i = 0; i < 18; i++) {
-      const y = dnaTop + (i / 18) * dnaH;
-      const phase = i * 0.48 + globalT * 3.2;
-      const x1 = dnaX + Math.sin(phase) * 95;
-      const x2 = dnaX - Math.sin(phase) * 95;
-
-      const isBroken = i === 7 || i === 12;
-      ctx.strokeStyle = isBroken ? "#ef4444" : "#38bdf8";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      if (isBroken) {
-        ctx.moveTo(x1, y);
-        ctx.lineTo((x1 + x2) / 2 - 22, y - 14);
-        ctx.moveTo((x1 + x2) / 2 + 22, y + 14);
-        ctx.lineTo(x2, y);
-      } else {
-        ctx.moveTo(x1, y);
-        ctx.lineTo(x2, y);
-      }
-      ctx.stroke();
-
-      ctx.fillStyle = isBroken ? "#f43f5e" : "#00f2fe";
-      ctx.beginPath();
-      ctx.arc(x1, y, 10, 0, Math.PI * 2);
-      ctx.arc(x2, y, 10, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.fillStyle = "#fca5a5";
-    ctx.font = "bold 28px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("IONISASI SINAR GAMMA MEMUTUS RANTAI DNA SEL", cx, 975);
-
-    drawArticulatedHuman(ctx, {
-      x: 260,
-      y: 1230,
-      scale: 1.22,
-      role: "firefighter",
-      emotion: "somber",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.5,
-      prop: "geiger",
-      facing: 1
-    });
-  } else if (sc.id === "scene_12") {
-    // Scene 12: Helikopter Mi-8 Menjatuhkan Boron & Timbal ke Kawah Teras + Likuidator
-    const heliX = cx + Math.sin(globalT * 1.4) * 140;
-    const heliY = 460 + Math.cos(globalT * 2.8) * 16;
-
-    // Badan Helikopter Mi-8
-    ctx.save();
-    ctx.translate(heliX, heliY);
-    ctx.fillStyle = "#4d7c0f";
-    drawRoundedRect(ctx, -110, -36, 190, 72, 28);
-    ctx.fill();
-    ctx.fillRect(-230, -18, 130, 22);
-    // Kaca Kokpit
-    ctx.fillStyle = "#38bdf8";
-    drawRoundedRect(ctx, 25, -26, 48, 34, 10);
-    ctx.fill();
-    // Baling-baling Utama Berputar Cepat
-    const rotorW = 240 * Math.cos(globalT * 32);
-    ctx.strokeStyle = "#e2e8f0";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(-rotorW, -48);
-    ctx.lineTo(rotorW, -48);
-    ctx.stroke();
-    ctx.restore();
-
-    // Karung Pasir, Timbal & Boron Jatuh ke Kawah Reaktor yang Membara
-    for (let d = 0; d < 8; d++) {
-      const dropP = ((globalT * 0.9 + d * 0.125) % 1);
-      const dx = lerp(heliX, cx + (d - 3.5) * 24, dropP);
-      const dy = lerp(heliY + 45, 890, dropP * dropP);
-      ctx.fillStyle = "#eab308";
-      ctx.beginPath();
-      ctx.arc(dx, dy, 11, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Kawah Reaktor Membara di Bawah
-    const craterGrad = ctx.createRadialGradient(cx, 920, 20, cx, 920, 260);
-    craterGrad.addColorStop(0, "#fef08a");
-    craterGrad.addColorStop(0.4, "#ef4444");
-    craterGrad.addColorStop(1, "rgba(239, 68, 68, 0)");
-    ctx.fillStyle = craterGrad;
-    ctx.beginPath();
-    ctx.arc(cx, 920, 260, Math.PI, Math.PI * 2);
-    ctx.fill();
-
-    drawArticulatedHuman(ctx, {
-      x: 240,
-      y: 1230,
-      scale: 1.22,
-      role: "liquidator",
-      emotion: "somber",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.6,
-      prop: "geiger",
-      facing: 1
-    });
-  } else if (sc.id === "scene_13") {
-    // Scene 13: Bianglala Ikonik Kota Hantu Pripyat, Hutan Merah (Red Forest), & Konvoi Bus Evakuasi
-    const wheelX = 330;
-    const wheelY = 580;
-    const wheelR = 165;
-
-    // Bianglala Pripyat
-    ctx.strokeStyle = "#94a3b8";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.arc(wheelX, wheelY, wheelR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    for (let s = 0; s < 12; s++) {
-      const ang = (s * Math.PI) / 6 + globalT * 0.12;
-      const gx = wheelX + Math.cos(ang) * wheelR;
-      const gy = wheelY + Math.sin(ang) * wheelR;
-      ctx.strokeStyle = "#64748b";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(wheelX, wheelY);
-      ctx.lineTo(gx, gy);
-      ctx.stroke();
-
-      // Kabin Kuning Bianglala Pripyat
-      ctx.fillStyle = "#eab308";
-      drawRoundedRect(ctx, gx - 16, gy, 32, 24, 6);
-      ctx.fill();
-    }
-
-    // Kaki Penyangga Bianglala
-    ctx.strokeStyle = "#cbd5e1";
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.moveTo(wheelX - 95, 840);
-    ctx.lineTo(wheelX, wheelY);
-    ctx.lineTo(wheelX + 95, 840);
-    ctx.stroke();
-
-    // Pohon-Pohon Pinus Hutan Merah (Red Forest) di Kanan
-    for (let tIdx = 0; tIdx < 4; tIdx++) {
-      const tx = 650 + tIdx * 95;
-      const ty = 840;
-      ctx.fillStyle = "#451a03";
-      ctx.fillRect(tx - 10, ty - 70, 20, 70);
-      ctx.fillStyle = "#b91c1c"; // Daun pinus mati berubah merah karat
-      ctx.beginPath();
-      ctx.moveTo(tx, ty - 220);
-      ctx.lineTo(tx - 48, ty - 65);
-      ctx.lineTo(tx + 48, ty - 65);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Konvoi Bus Evakuasi Bergerak
-    const busX = ((localT * 110) % 1200) - 150;
-    ctx.fillStyle = "#f97316";
-    drawRoundedRect(ctx, busX, 855, 190, 68, 12);
-    ctx.fill();
-    ctx.fillStyle = "#fef08a";
-    for (let w = 0; w < 5; w++) {
-      ctx.fillRect(busX + 18 + w * 34, 868, 24, 22);
-    }
-
-    drawArticulatedHuman(ctx, {
-      x: 820,
-      y: 1230,
-      scale: 1.2,
-      role: "scientist",
-      emotion: "somber",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.5,
-      prop: "geiger",
-      facing: -1
-    });
-  } else {
-    // Scene 14 & 15: Kubah Baja New Safe Confinement & Masa Depan Energi Bersih
-    const archY = 860;
-    const slideProgress = sc.id === "scene_14" ? easeInOutCubic(clamp(localT / 8.0, 0, 1)) : 1.0;
-
-    // Sarkofagus Lama di Tengah
-    ctx.fillStyle = "#475569";
-    ctx.fillRect(cx - 170, archY - 210, 340, 210);
-
-    // Struktur Kubah Lengkung Baja "New Safe Confinement" Bergeser Menutupi Reaktor
-    const archX = lerp(cx - 320, cx, slideProgress);
-    ctx.save();
-    ctx.strokeStyle = "#e2e8f0";
-    ctx.fillStyle = "rgba(148, 163, 184, 0.88)";
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.arc(archX, archY, 310, Math.PI, Math.PI * 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Rangka Baja Kubah (Truss Grid)
-    ctx.strokeStyle = "#0ea5e9";
-    ctx.lineWidth = 3;
-    for (let a = 1; a < 8; a++) {
-      const radAngle = Math.PI + (a * Math.PI) / 8;
-      ctx.beginPath();
-      ctx.moveTo(archX, archY);
-      ctx.lineTo(archX + Math.cos(radAngle) * 310, archY + Math.sin(radAngle) * 310);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    ctx.fillStyle = "#38ef7d";
-    ctx.font = "bold 30px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(
-      sc.id === "scene_14"
-        ? "NEW SAFE CONFINEMENT (36.000 TON BAJA PELINDUNG)"
-        : "ENERGI NUKLIR MODERN: BERSIH, AMAN & BERKELANJUTAN",
-      cx,
-      935
+    // Gerakan Kamera: Medium Shot Udin -> Zoom Mikroskopis menembus Toroid & Transistor
+    const zoomMicro = smoothstep(0.20, 0.32, p) * (1 - smoothstep(0.88, 0.96, p));
+    cam.setPose(
+      lerp(0, 28, zoomMicro),
+      lerp(135, 96, zoomMicro),
+      lerp(-390, -175, zoomMicro),
+      lerp(0, 8, zoomMicro),
+      lerp(75, 24, zoomMicro),
+      lerp(20, -18, zoomMicro),
+      lerp(720, 820, zoomMicro)
     );
 
-    drawArticulatedHuman(ctx, {
-      x: cx,
-      y: 1230,
-      scale: 1.24,
-      role: "scientist",
-      emotion: "excited",
-      isSpeaking,
-      speechPhase: globalT,
-      time: globalT,
-      pointAngle: -0.65,
-      prop: sc.id === "scene_15" ? "atom_orb" : "clipboard",
-      facing: 1
+    const slowCycle = clamp((p - 0.28) / 0.52, 0, 1);
+    const effectiveLedGlow = isFast ? 1.0 : (xrayT > 0.5 ? (slowCycle > 0.72 ? 1.0 : 0.25) : ledOnT);
+
+    renderEnvironment3D(ctx, cam, {
+      darkMode: darkT,
+      ledGlow: effectiveLedGlow,
+      time: globalTime
+    });
+
+    renderUdin3D(ctx, cam, {
+      time: globalTime,
+      udinVisible: lerp(1.0, 0.35, zoomMicro),
+      expression: ledOnT > 0.5 ? "proud" : "smile",
+      speaking: true,
+      darkMode: darkT,
+      ledGlow: effectiveLedGlow,
+      rightHandPos: p < 0.12 ? { x: -190, y: 65, z: 40 } : { x: -135, y: 32, z: 35 },
+      leftHandPos: { x: 135, y: 32, z: 35 },
+      rightHandGesture: "point",
+      leftHandGesture: "open"
+    });
+
+    renderAssembledJouleThief3D(ctx, cam, {
+      time: globalTime,
+      assemblyProgress: 1.0,
+      xrayMode: xrayT,
+      ledBrightness: effectiveLedGlow,
+      cyclePhase: slowCycle,
+      fastPulse: isFast
+    });
+
+    if (isFast) {
+      drawFloatingLabel3D(
+        ctx,
+        cam,
+        { x: 68, y: 62, z: -55 },
+        "Frekuensi > 20.000 Hz (Puluhan Ribu Kedipan/Detik)",
+        "Mata Melihat LED Menyala Terang Stabil!",
+        "#38bdf8",
+        1,
+        { x: 0, y: -48 }
+      );
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // ADEGAN 5: Penutup / Outro (03:00 - 03:22)
+  // --------------------------------------------------------------------------
+  else {
+    // Medium Close-Up Udin di meja belajar, lampu kamar kembali menyala terang
+    cam.setPose(
+      0,
+      138,
+      -375,
+      0,
+      88,
+      35,
+      740
+    );
+
+    renderEnvironment3D(ctx, cam, { darkMode: 0, ledGlow: 0.85, time: globalTime });
+    renderMultimeter3D(ctx, cam, { x: -185, y: 4, z: 20 }, "0.85 V", false, null);
+
+    // Rangkaian Joule Thief tetap menyala terang di atas meja samping multitester
+    renderAssembledJouleThief3D(ctx, cam, {
+      time: globalTime,
+      assemblyProgress: 1.0,
+      xrayMode: 0,
+      ledBrightness: 1.0,
+      cyclePhase: 0,
+      fastPulse: true
+    });
+
+    // Udin menatap kamera sambil mengacungkan jempol (Thumbs Up) & tersenyum bangga
+    renderUdin3D(ctx, cam, {
+      time: globalTime,
+      udinVisible: 1.0,
+      expression: "proud",
+      speaking: p < 0.92,
+      headTilt: 0.04,
+      headYaw: Math.sin(globalTime * 1.5) * 0.08,
+      rightHandPos: { x: -85, y: 78 + Math.sin(globalTime * 4) * 4, z: -15 },
+      leftHandPos: { x: 115, y: 38, z: 25 },
+      rightHandGesture: "thumbsup",
+      leftHandGesture: "open"
     });
   }
+
+  // Overlay UI & Subtitle
+  renderUIOverlay(ctx, activeScene, sceneTime, globalTime, totalDuration);
 }
 
 // ============================================================================
-// HUD TELEMETRI, HEADER SINEMATIK & SUBTITLE KARAOKE 9:16
+// 10. SINTESIS AUDIO NARASI (TTS), EFEK SUARA (SFX) & LO-FI BEAT
 // ============================================================================
-function drawHudAndSubtitles(ctx, sc, globalT, totalDurationSec) {
-  // 1. Header Atas (Babak, Judul Adegan, Timestamp, & Geiger Counter)
-  ctx.save();
-  ctx.fillStyle = "rgba(9, 13, 22, 0.86)";
-  ctx.strokeStyle = sc.themeColor;
-  ctx.lineWidth = 3;
-  drawRoundedRect(ctx, 48, 56, WIDTH - 96, 225, 26);
-  ctx.fill();
-  ctx.stroke();
+function getAudioDuration(filePath) {
+  try {
+    const out = execSync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`,
+      { stdio: ['pipe', 'pipe', 'ignore'] }
+    ).toString().trim();
+    const d = parseFloat(out);
+    return Number.isFinite(d) && d > 0 ? d : null;
+  } catch (e) {
+    return null;
+  }
+}
 
-  // Badge Babak
-  ctx.fillStyle = sc.themeColor;
-  drawRoundedRect(ctx, 82, 82, 490, 44, 12);
-  ctx.fill();
-  ctx.fillStyle = "#090d16";
-  ctx.font = "bold 23px sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText(sc.act, 102, 112);
-
-  // Indikator Geiger Counter Live di Kanan Atas
-  const liveCpm = Math.max(
-    12,
-    Math.round(sc.geigerCpm + Math.sin(globalT * 11) * (sc.geigerCpm * 0.08 + 2))
+async function generateSceneVoice(scene, outputMp3) {
+  if (typeof global.generateStudioVoice === 'function') {
+    await global.generateStudioVoice(scene.narration, outputMp3, VOICE_MODEL);
+    if (fs.existsSync(outputMp3) && fs.statSync(outputMp3).size > 100) {
+      return;
+    }
+  }
+  // Fallback hening sesuai target durasi apabila dijalankan di lingkungan lokal tanpa server TTS
+  execSync(
+    `ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t ${scene.targetDuration} -q:a 9 -acodec libmp3lame "${outputMp3}"`,
+    { stdio: 'ignore' }
   );
-  ctx.fillStyle = sc.geigerCpm > 1000 ? "#ef4444" : "#facc15";
-  ctx.font = "bold 25px monospace";
-  ctx.textAlign = "right";
-  ctx.fillText(`☢ GEIGER: ${liveCpm.toLocaleString("id-ID")} CPM`, WIDTH - 82, 112);
-
-  // Judul Adegan
-  ctx.fillStyle = "#f8fafc";
-  ctx.font = "bold 40px sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText(sc.title, 82, 178);
-
-  // Label Waktu / Lokasi
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = "bold 25px monospace";
-  ctx.fillText(`📍 ${sc.timeLabel}`, 82, 232);
-  ctx.restore();
-
-  // 2. Kotak Subtitle Dinamis (Karaoke Highlight Kata demi Kata) di Bagian Bawah 9:16
-  ctx.save();
-  const subBoxX = 54;
-  const subBoxY = 1445;
-  const subBoxW = WIDTH - 108;
-  const subBoxH = 365;
-
-  ctx.fillStyle = "rgba(9, 13, 22, 0.9)";
-  ctx.strokeStyle = sc.themeColor;
-  ctx.lineWidth = 3;
-  drawRoundedRect(ctx, subBoxX, subBoxY, subBoxW, subBoxH, 28);
-  ctx.fill();
-  ctx.stroke();
-
-  // Cari indeks kata yang sedang diucapkan saat ini
-  const timings = sc.wordTimings || [];
-  let activeWordIdx = -1;
-  for (let i = 0; i < timings.length; i++) {
-    if (globalT >= timings[i].start && globalT <= timings[i].end) {
-      activeWordIdx = i;
-      break;
-    } else if (globalT > timings[i].end) {
-      activeWordIdx = i;
-    }
-  }
-
-  // Tampilkan jendela 14 kata di sekitar kata aktif agar teks besar, jelas, dan mudah dibaca di 9:16
-  const chunkSize = 14;
-  const chunkIndex = Math.max(0, Math.floor(Math.max(0, activeWordIdx) / chunkSize));
-  const sliceStart = chunkIndex * chunkSize;
-  const visibleWords = timings.slice(sliceStart, sliceStart + chunkSize);
-
-  ctx.font = "bold 42px sans-serif";
-  const maxLineWidth = subBoxW - 90;
-  const lines = [];
-  let currentLine = [];
-  let currentWidth = 0;
-
-  visibleWords.forEach((wObj, idx) => {
-    const absIdx = sliceStart + idx;
-    const wordStr = wObj.word + " ";
-    const wWidth = ctx.measureText(wordStr).width;
-    if (currentWidth + wWidth > maxLineWidth && currentLine.length > 0) {
-      lines.push(currentLine);
-      currentLine = [];
-      currentWidth = 0;
-    }
-    currentLine.push({ ...wObj, absIdx, wordStr, wWidth });
-    currentWidth += wWidth;
-  });
-  if (currentLine.length > 0) {
-    lines.push(currentLine);
-  }
-
-  const lineHeight = 64;
-  const startTextY = subBoxY + (subBoxH - lines.length * lineHeight) / 2 + 42;
-
-  lines.forEach((line, lIdx) => {
-    const totalLineW = line.reduce((acc, item) => acc + item.wWidth, 0);
-    let cursorX = subBoxX + (subBoxW - totalLineW) / 2;
-    const yPos = startTextY + lIdx * lineHeight;
-
-    line.forEach((item) => {
-      const isCurrent = item.absIdx === activeWordIdx && globalT >= sc.voiceStartTime && globalT <= sc.voiceEndTime;
-      const isSpoken = item.absIdx < activeWordIdx || globalT > sc.voiceEndTime;
-
-      if (isCurrent) {
-        ctx.fillStyle = sc.themeColor;
-        drawRoundedRect(ctx, cursorX - 6, yPos - 40, item.wWidth + 4, 52, 10);
-        ctx.fill();
-        ctx.fillStyle = "#090d16";
-      } else if (isSpoken) {
-        ctx.fillStyle = "#ffffff";
-      } else {
-        ctx.fillStyle = "#94a3b8";
-      }
-
-      ctx.textAlign = "left";
-      ctx.fillText(item.wordStr, cursorX, yPos);
-      cursorX += item.wWidth;
-    });
-  });
-  ctx.restore();
-
-  // 3. Progress Bar Durasi Video 5 Menit di Paling Bawah
-  const overallProgress = clamp(globalT / totalDurationSec, 0, 1);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.14)";
-  ctx.fillRect(54, 1845, WIDTH - 108, 14);
-  ctx.fillStyle = sc.themeColor;
-  ctx.fillRect(54, 1845, (WIDTH - 108) * overallProgress, 14);
 }
 
-// ============================================================================
-// RENDER FRAME TUNGGAL (60 FPS)
-// ============================================================================
-function renderFrame(ctx, sceneIdx, globalT, totalDurationSec) {
-  const sc = SCENES[sceneIdx];
-  const localT = globalT - sc.startTime;
-  const sceneProgress = clamp(localT / sc.duration, 0, 1);
-  const isSpeaking = globalT >= sc.voiceStartTime && globalT <= sc.voiceEndTime;
+function generateBackgroundLofiAndSFX(outputWav, totalDuration, sceneTimings) {
+  const sampleRate = 44100;
+  const numSamples = Math.floor(totalDuration * sampleRate);
+  const dataSize = numSamples * 2; // 16-bit mono
+  const buffer = Buffer.alloc(44 + dataSize);
 
-  ctx.save();
+  // Header WAV PCM 16-bit
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(dataSize, 40);
 
-  // Latar Belakang Gradien Dinamis
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-  if (sceneIdx >= 5 && sceneIdx <= 10) {
-    bgGrad.addColorStop(0, "#09040a");
-    bgGrad.addColorStop(0.5, "#1f0916");
-    bgGrad.addColorStop(1, "#090d16");
-  } else {
-    bgGrad.addColorStop(0, "#040814");
-    bgGrad.addColorStop(0.5, "#0b192c");
-    bgGrad.addColorStop(1, "#050b14");
-  }
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  const s1 = sceneTimings[0];
+  const s2 = sceneTimings[1];
+  const s3 = sceneTimings[2];
+  const s4 = sceneTimings[3];
+  const s5 = sceneTimings[4];
 
-  // Efek Kamera Zoom & Guncangan (Screen Shake saat Ledakan Chernobyl Scene 9-10)
-  const zoom = lerp(1.0, sc.cameraZoom || 1.05, sceneProgress);
-  let shakeX = 0;
-  let shakeY = 0;
-  if (sc.id === "scene_10" && localT >= 1.0 && localT <= 9.5) {
-    const intensity = localT < 4.5 ? 18 : 26 * Math.exp(-(localT - 4.0) * 0.45);
-    shakeX = Math.sin(globalT * 65) * intensity;
-    shakeY = Math.cos(globalT * 78) * intensity;
-  } else if (sc.id === "scene_09" && localT > 8.0) {
-    shakeX = Math.sin(globalT * 45) * 6;
-    shakeY = Math.cos(globalT * 52) * 6;
-  }
-
-  ctx.save();
-  ctx.translate(WIDTH / 2 + shakeX, HEIGHT / 2 + shakeY);
-  ctx.scale(zoom, zoom);
-  ctx.translate(-WIDTH / 2, -HEIGHT / 2);
-
-  // Lantai Panggung Laboratorium / Ruang Reaktor
-  ctx.fillStyle = "rgba(15, 23, 42, 0.78)";
-  ctx.fillRect(0, 1340, WIDTH, HEIGHT - 1340);
-  ctx.strokeStyle = sc.themeColor;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0, 1340);
-  ctx.lineTo(WIDTH, 1340);
-  ctx.stroke();
-
-  // Partikel Atmosferik / Debu Radiasi Melayang
-  for (let p = 0; p < 24; p++) {
-    const px = ((p * 173 + globalT * 28 * ((p % 3) + 1)) % WIDTH);
-    const py = ((p * 293 - globalT * 36 * ((p % 2) + 1)) % HEIGHT + HEIGHT) % HEIGHT;
-    ctx.fillStyle =
-      sceneIdx >= 9 && sceneIdx <= 12
-        ? "rgba(250, 204, 21, 0.35)"
-        : "rgba(56, 189, 248, 0.22)";
-    ctx.beginPath();
-    ctx.arc(px, py, 2.5 + (p % 4), 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Gambar Panggung Utama Sesuai Babak Cerita
-  if (sceneIdx <= 2) {
-    drawAtomicPhysicsStage(ctx, sc, localT, globalT, isSpeaking);
-  } else if (sceneIdx <= 4) {
-    drawNuclearPlantStage(ctx, sc, localT, globalT, isSpeaking);
-  } else if (sceneIdx <= 9) {
-    drawChernobylDisasterStage(ctx, sc, localT, globalT, isSpeaking);
-  } else {
-    drawAftermathAndFutureStage(ctx, sc, localT, globalT, isSpeaking);
-  }
-
-  ctx.restore(); // Akhir transformasi kamera panggung
-
-  // Gambar HUD & Subtitle Karaoke
-  drawHudAndSubtitles(ctx, sc, globalT, totalDurationSec);
-
-  ctx.restore();
-}
-
-// ============================================================================
-// PIPELINE RENDER UTAMA KE ./output.mp4 (60 FPS, BUFFER RGBA MURNI)
-// ============================================================================
-async function main() {
-  const totalDurationSec = await buildVoiceoverTimeline();
-  const sfxWavPath = path.join(TEMP_DIR, "sfx_master.wav");
-  const masterAudioPath = path.join(TEMP_DIR, "master_audio.m4a");
-
-  generateProceduralSfxWav(totalDurationSec, sfxWavPath);
-  buildMasterAudioTrack(totalDurationSec, sfxWavPath, masterAudioPath);
-
-  console.log("=== [4/4] MERENDER ANIMASI 1080x1920 @ 60 FPS KE ./output.mp4 ===");
-  const canvas = createCanvas(WIDTH, HEIGHT);
-  const ctx = canvas.getContext("2d");
-  const totalFrames = Math.round(totalDurationSec * FPS);
-
-  const ffmpegArgs = [
-    "-y",
-    "-f",
-    "rawvideo",
-    "-pix_fmt",
-    "rgba",
-    "-s",
-    `${WIDTH}x${HEIGHT}`,
-    "-r",
-    String(FPS),
-    "-i",
-    "pipe:0",
-    "-i",
-    masterAudioPath,
-    "-c:v",
-    "libx264",
-    "-preset",
-    "ultrafast",
-    "-crf",
-    "20",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    "-shortest",
-    OUTPUT_FILE
+  // Progresi Chord Lo-Fi Hangat (Fmaj7 - Em7 - Dm7 - Cmaj7)
+  const chords = [
+    [174.61, 220.00, 261.63, 329.63],
+    [164.81, 196.00, 246.94, 293.66],
+    [146.83, 174.61, 220.00, 261.63],
+    [130.81, 164.81, 196.00, 246.94]
   ];
 
-  const ffmpegProc = spawn("ffmpeg", ffmpegArgs, {
-    stdio: ["pipe", "ignore", "pipe"]
-  });
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    let sample = 0;
 
-  ffmpegProc.stderr.on("data", () => {
-    // Konsumsi log stderr ffmpeg agar pipe tidak penuh
-  });
+    // 1. Lo-Fi Beat masuk mulai Adegan 2 dan naik sedikit di Penutup lalu fade-out
+    if (t >= s2.start) {
+      const chordIdx = Math.floor((t * 0.5) % chords.length);
+      const activeChord = chords[chordIdx];
+      let pad = 0;
+      for (const freq of activeChord) {
+        pad += Math.sin(2 * Math.PI * freq * t);
+      }
+      pad *= 0.25;
 
-  let sceneIdx = 0;
-  for (let frame = 0; frame < totalFrames; frame++) {
-    const globalT = frame / FPS;
-    while (sceneIdx < SCENES.length - 1 && globalT >= SCENES[sceneIdx].endTime) {
-      sceneIdx++;
+      // Ketukan Drum Lo-Fi Lembut (80 BPM)
+      const beatPhase = (t * (80 / 60)) % 1;
+      const kick = beatPhase < 0.12 ? Math.sin(2 * Math.PI * (95 - beatPhase * 450) * t) * (1 - beatPhase / 0.12) : 0;
+
+      let bgVol = 0.045;
+      if (t >= s5.start) {
+        const outroP = (t - s5.start) / s5.duration;
+        bgVol = outroP > 0.75 ? lerp(0.08, 0.0, (outroP - 0.75) / 0.25) : 0.075;
+      }
+      sample += (pad * 0.6 + kick * 0.4) * bgVol;
     }
 
-    renderFrame(ctx, sceneIdx, globalT, totalDurationSec);
+    // 2. SFX Adegan 1: Kursi berdecit pelan & Beep Multitester saat mengukur 0.85V
+    const beepTime = s1.start + s1.duration * 0.42;
+    if (t >= beepTime && t <= beepTime + 0.18) {
+      sample += Math.sin(2 * Math.PI * 2450 * t) * 0.22;
+    }
 
-    const rawBuffer =
-      typeof canvas.data === "function"
-        ? canvas.data()
-        : canvas.toBuffer("raw");
+    // 3. SFX Adegan 2: Bunyi "Pop!" ringan setiap komponen muncul
+    for (const frac of [0.10, 0.24, 0.40, 0.55, 0.70, 0.83]) {
+      const popT = s2.start + s2.duration * frac;
+      if (t >= popT && t <= popT + 0.09) {
+        const dt = (t - popT) / 0.09;
+        sample += Math.sin(2 * Math.PI * (320 + dt * 520) * t) * (1 - dt) * 0.24;
+      }
+    }
 
-    const canContinue = ffmpegProc.stdin.write(rawBuffer);
-    if (!canContinue) {
-      await new Promise((resolve) => ffmpegProc.stdin.once("drain", resolve));
+    // 4. SFX Adegan 3: Suara desis solder ("tssss") saat titik sambungan disolder
+    const solderStart = s3.start + s3.duration * 0.84;
+    const solderEnd = s3.start + s3.duration * 0.98;
+    if (t >= solderStart && t <= solderEnd) {
+      const noise = (Math.sin(i * 12.9898) * 43758.5453) % 1;
+      sample += noise * 0.065 * Math.sin(((t - solderStart) / (solderEnd - solderStart)) * Math.PI);
+    }
+
+    // 5. SFX Adegan 4: Klik sakelar, Whoosh medan magnet, & Dengung frekuensi tinggi halus
+    const switchT = s4.start + s4.duration * 0.08;
+    if (t >= switchT && t <= switchT + 0.04) {
+      sample += Math.sin(2 * Math.PI * 950 * t) * 0.3;
+    }
+    if (t >= s4.start + s4.duration * 0.22 && t <= s4.end) {
+      sample += Math.sin(2 * Math.PI * 1850 * t) * 0.015;
+    }
+
+    const pcm = Math.max(-1, Math.min(1, sample));
+    buffer.writeInt16LE(Math.floor(pcm * 32767), 44 + i * 2);
+  }
+
+  fs.writeFileSync(outputWav, buffer);
+}
+
+// ============================================================================
+// 11. PIPELINE UTAMA: GENERATE AUDIO -> RENDER 3D CANVAS -> FFMPEG MP4
+// ============================================================================
+async function main() {
+  console.log("=== Memulai Proses Pembuatan Video 3D Joule Thief (Udin) ===");
+
+  const sceneTimings = [];
+  let currentStart = 0;
+
+  for (const scene of SCENES) {
+    const rawMp3 = path.join(TEMP_DIR, `scene_${scene.id}_raw.mp3`);
+    const paddedWav = path.join(TEMP_DIR, `scene_${scene.id}_pad.wav`);
+
+    console.log(`[TTS] Membuat suara Udin untuk ${scene.name}...`);
+    await generateSceneVoice(scene, rawMp3);
+
+    const voiceDur = getAudioDuration(rawMp3) || scene.targetDuration;
+    const finalDur = Math.max(scene.targetDuration, Math.ceil(voiceDur + 1.2));
+
+    // Konversi dan tambahkan jeda napas alami di akhir adegan tanpa filter atempo=1.18
+    execSync(
+      `ffmpeg -y -i "${rawMp3}" -af "apad=whole_dur=${finalDur}" -ar 44100 -ac 2 "${paddedWav}"`,
+      { stdio: 'ignore' }
+    );
+
+    sceneTimings.push({
+      ...scene,
+      file: paddedWav,
+      start: currentStart,
+      duration: finalDur,
+      end: currentStart + finalDur
+    });
+    currentStart += finalDur;
+  }
+
+  const totalDuration = currentStart;
+  console.log(`[Audio] Total durasi video: ${totalDuration.toFixed(1)} detik (~${(totalDuration / 60).toFixed(2)} menit).`);
+
+  // Gabungkan semua segmen suara narasi
+  const concatListPath = path.join(TEMP_DIR, 'concat_list.txt');
+  fs.writeFileSync(
+    concatListPath,
+    sceneTimings.map(st => `file '${st.file.replace(/'/g, "'\\''")}'`).join('\n')
+  );
+
+  const fullVoiceWav = path.join(TEMP_DIR, 'full_voice.wav');
+  execSync(
+    `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${fullVoiceWav}"`,
+    { stdio: 'ignore' }
+  );
+
+  // Buat trek musik latar Lo-Fi & SFX lalu campurkan dengan suara narasi Udin
+  const bgSfxWav = path.join(TEMP_DIR, 'bg_sfx.wav');
+  generateBackgroundLofiAndSFX(bgSfxWav, totalDuration, sceneTimings);
+
+  const masterAudioMp3 = path.join(TEMP_DIR, 'master_audio.mp3');
+  execSync(
+    `ffmpeg -y -i "${fullVoiceWav}" -i "${bgSfxWav}" -filter_complex "[0:a]volume=1.0[v];[1:a]volume=0.85[bg];[v][bg]amix=inputs=2:duration=first:dropout_transition=2[out]" -map "[out]" -c:a libmp3lame -q:a 2 "${masterAudioMp3}"`,
+    { stdio: 'ignore' }
+  );
+
+  // Mulai proses streaming frame RGBA murni dari @napi-rs/canvas ke FFmpeg
+  const totalFrames = Math.floor(totalDuration * FPS);
+  console.log(`[Render] Merender ${totalFrames} frame pada resolusi ${WIDTH}x${HEIGHT} (${FPS} FPS)...`);
+
+  const canvas = createCanvas(WIDTH, HEIGHT);
+  const ctx = canvas.getContext('2d');
+  const cam = new Camera3D();
+
+  const ffmpegArgs = [
+    '-y',
+    '-f', 'rawvideo',
+    '-pix_fmt', 'rgba',
+    '-s', `${WIDTH}x${HEIGHT}`,
+    '-r', String(FPS),
+    '-i', 'pipe:0',
+    '-i', masterAudioMp3,
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-pix_fmt', 'yuv420p',
+    '-crf', '20',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-shortest',
+    OUTPUT_VIDEO
+  ];
+
+  const ffmpegProc = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'ignore', 'pipe'] });
+
+  let ffmpegErr = '';
+  ffmpegProc.stderr.on('data', chunk => {
+    ffmpegErr += chunk.toString();
+  });
+
+  for (let frame = 0; frame < totalFrames; frame++) {
+    const globalTime = frame / FPS;
+    renderMasterFrame(ctx, cam, globalTime, sceneTimings, totalDuration);
+
+    const rawBuffer = canvas.data();
+    const canWrite = ffmpegProc.stdin.write(rawBuffer);
+    if (!canWrite) {
+      await new Promise(resolve => ffmpegProc.stdin.once('drain', resolve));
     }
 
     if (frame % (FPS * 15) === 0 || frame === totalFrames - 1) {
-      const pct = ((frame / totalFrames) * 100).toFixed(1);
-      console.log(`  -> Progress Render: Frame ${frame}/${totalFrames} (${pct}%)`);
+      const pct = ((frame + 1) / totalFrames * 100).toFixed(1);
+      console.log(`[Progress] Frame ${frame + 1}/${totalFrames} (${pct}%)`);
     }
   }
 
   ffmpegProc.stdin.end();
 
   await new Promise((resolve, reject) => {
-    ffmpegProc.on("close", (code) => {
+    ffmpegProc.on('close', code => {
       if (code === 0) resolve();
-      else reject(new Error(`FFmpeg keluar dengan kode ${code}`));
+      else reject(new Error(`FFmpeg keluar dengan kode ${code}: ${ffmpegErr.slice(-400)}`));
     });
-    ffmpegProc.on("error", reject);
   });
 
-  console.log(`=== SELESAI! Video berhasil disimpan ke: ${OUTPUT_FILE} ===`);
+  console.log(`=== Selesai! Video disimpan di: ${OUTPUT_VIDEO} ===`);
 }
 
-main().catch((err) => {
-  console.error("FATAL RENDER ERROR:", err);
+main().catch(err => {
+  console.error("Terjadi kesalahan saat merender video:", err);
   process.exit(1);
 });
+```
